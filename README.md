@@ -6,6 +6,12 @@
 
 A Model Context Protocol (MCP) server that enables AI assistants to perform web searches using [SearXNG](https://github.com/searxng/searxng), a privacy-respecting metasearch engine. Works out-of-the-box with zero additional deployment by automatically selecting a random instance from [SearX.space](https://searx.space/), while also supporting private instances with basic authentication.
 
+## This project is deprecated. Its successor is **searxNcrawl** at https://github.com/DasDigitaleMomentum/searxNcrawl
+
+## Deprecated
+
+This repository is deprecated in favor of **searxNcrawl**. The successor currently does **not** include round-robin instance selection (it is usually unreliable). If you file a suitable defect report, it can be added.
+
 ## Features
 
 - **Zero-configuration setup**: Works immediately by using a random public instance from [SearX.space](https://searx.space/)
