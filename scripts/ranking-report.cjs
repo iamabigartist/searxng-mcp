@@ -134,13 +134,13 @@ async function main() {
   td { padding: 6px 10px; border-bottom: 1px solid #eee; font-size: 13px; overflow: hidden; text-overflow: ellipsis; text-align: left; }
   th:first-child { width: 40px; }
   th:nth-child(2) { width: ${urlMaxW}px; }
-  th:nth-child(3) { width: 140px; }
-  th:nth-child(4) { width: 60px; }
-  th:nth-child(5) { width: 140px; }
-  th:nth-child(6) { width: 140px; }
-  th:nth-child(7) { width: 60px; }
-  th:nth-child(8) { width: 80px; }
-  th:nth-child(9) { width: 52px; }
+   th:nth-child(3) { width: 140px; }
+   th:nth-child(4) { width: 60px; }
+   th:nth-child(5) { width: 140px; }
+   th:nth-child(6) { width: 120px; }
+   th:nth-child(7) { width: 60px; }
+   th:nth-child(8) { width: 90px; }
+   th:nth-child(9) { width: 60px; }
   tr.top10 { background: #e8f5e9; }
   tr:hover { background: #fff3e0; }
   .url a { color: #1976d2; text-decoration: none; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -165,7 +165,7 @@ async function main() {
 <table>
 <thead>
 <tr>
-  <th>#</th><th>Instance</th><th>Speed [log₅]</th><th>Core</th><th>Load [×10]</th><th>Uptime [%]</th><th>Total</th><th>Yr Uptime</th><th>Grade</th>
+   <th>#</th><th>Instance</th><th>Speed [log₅]</th><th>Core</th><th>Load [×10]</th><th>Monthly</th><th>Total</th><th>Yearly</th><th>Grade</th>
 </tr>
 </thead>
 <tbody>

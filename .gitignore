@@ -22,6 +22,9 @@ dist/
 *.swp
 *.swo
 
+# Generated
+ranking.html
+
 # OS
 .DS_Store
 Thumbs.db
