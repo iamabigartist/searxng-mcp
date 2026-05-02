@@ -97,16 +97,14 @@ async function main() {
     `<span class="${v[i] ? 'ok' : 'fail'}">${e[0].toUpperCase()}</span>`
   ).join('');
 
-  const bucket = (label, b) => `<span class="bucket">(${label}:${b})</span>`;
-
   const rows = ranked.map((r, i) => `
     <tr class="${i < 10 ? 'top10' : ''}">
       <td class="rank">${i + 1}</td>
       <td class="url"><a href="${r.url}" target="_blank">${r.url.replace('https://','')}</a></td>
-      <td class="num">${r.speed.toFixed(3)}s ${bucket('s', r.speedBucket)}</td>
+      <td class="num">${r.speed.toFixed(3)}s <span class="bucket">[${r.speedBucket}]</span></td>
       <td class="engines">${engineLabel(r.engineVec)}</td>
-      <td class="num">${r.load != null ? r.load.toFixed(3) + 's ' + bucket('l', r.loadBucket) : '-'}</td>
-      <td class="num">${r.uptimeMonth.toFixed(1)}% ${bucket('u', r.uptimeBucket)}</td>
+      <td class="num">${r.load != null ? r.load.toFixed(3) + 's <span class=\"bucket\">[' + r.loadBucket + ']</span>' : '-'}</td>
+      <td class="num">${r.uptimeMonth.toFixed(1)}% <span class="bucket">[${r.uptimeBucket}]</span></td>
       <td class="num">${r.totalEngines}</td>
       <td class="num">${r.uptimeYear.toFixed(1)}%</td>
       <td>${r.htmlGrade}</td>
@@ -151,14 +149,14 @@ async function main() {
   Top 10 highlighted
 </div>
 <div class="legend">
-  Sort: <code>speed(log₅)</code> → <code>engines(G>B>B>D)</code> → <code>load(0.1s)</code> → <code>uptime(%)</code> → <code>total engines</code> &nbsp;|&nbsp;
+  Sort priority: <code>① speed(log₅)</code> → <code>② engines(G&gt;B&gt;B&gt;D)</code> → <code>③ load(×10)</code> → <code>④ uptime(%)</code> → <code>⑤ total engines</code> &nbsp;|&nbsp;
   <span class="ok">G</span>=Google <span class="ok">B</span>=Brave <span class="ok">B</span>=Bing <span class="ok">D</span>=DuckDuckGo &nbsp;|&nbsp;
-  Buckets: <span class="bucket">(s:-1)</span>=speed <span class="bucket">(l:4)</span>=load <span class="bucket">(u:100)</span>=uptime
+  <span class="bucket">[N]</span> = bucket used for comparison
 </div>
 <table>
 <thead>
 <tr>
-  <th>#</th><th>Instance</th><th>Speed</th><th>Engines</th><th>Load</th><th>Uptime</th><th>Total Eng</th><th>Uptime Yr</th><th>HTML</th>
+  <th>#</th><th>Instance</th><th>Response [log₅]</th><th>Engines</th><th>Load [×10]</th><th>Uptime Mo [%]</th><th>Engines #</th><th>Uptime Yr</th><th>HTML</th>
 </tr>
 </thead>
 <tbody>
