@@ -137,9 +137,9 @@ async function main() {
    th:nth-child(3) { width: 140px; }
    th:nth-child(4) { width: 60px; }
    th:nth-child(5) { width: 140px; }
-   th:nth-child(6) { width: 120px; }
+   th:nth-child(6) { width: 150px; }
    th:nth-child(7) { width: 60px; }
-   th:nth-child(8) { width: 90px; }
+   th:nth-child(8) { width: 140px; }
    th:nth-child(9) { width: 60px; }
   tr.top10 { background: #e8f5e9; }
   tr:hover { background: #fff3e0; }
@@ -165,7 +165,7 @@ async function main() {
 <table>
 <thead>
 <tr>
-   <th>#</th><th>Instance</th><th>Speed [log₅]</th><th>Core</th><th>Load [×10]</th><th>Monthly</th><th>Total</th><th>Yearly</th><th>Grade</th>
+   <th>#</th><th>Instance</th><th>Speed [log₅]</th><th>Core</th><th>Load [×10]</th><th>Uptime Monthly</th><th>Total</th><th>Uptime Yearly</th><th>Grade</th>
 </tr>
 </thead>
 <tbody>
