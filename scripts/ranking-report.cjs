@@ -149,14 +149,13 @@ async function main() {
   Top 10 highlighted
 </div>
 <div class="legend">
-  Sort priority: <code>① speed(log₅)</code> → <code>② core engines(G&gt;B&gt;B&gt;D)</code> → <code>③ load(×10)</code> → <code>④ uptime(%)</code> → <code>⑤ total engines</code> &nbsp;|&nbsp;
-  <span class="ok">G</span>=Google <span class="ok">B</span>=Brave <span class="ok">B</span>=Bing <span class="ok">D</span>=DuckDuckGo &nbsp;|&nbsp;
-  <span class="bucket">[N]</span> = bucket for comparison
+  Columns ordered by sort priority ①→⑤. <span class="bucket">[N]</span> = bucket for comparison.
+  &nbsp;|&nbsp; <span class="ok">G</span>=Google <span class="ok">B</span>=Brave <span class="ok">B</span>=Bing <span class="ok">D</span>=DuckDuckGo
 </div>
 <table>
 <thead>
 <tr>
-  <th>#</th><th>Instance</th><th>Speed [log₅]</th><th>Core</th><th>Load [×10]</th><th>Uptime Mo [%]</th><th>Total Eng</th><th>Uptime Yr</th><th>Grade</th>
+  <th>#</th><th>Instance</th><th>① Speed [log₅]</th><th>② Core</th><th>③ Load [×10]</th><th>④ Uptime [%]</th><th>⑤ Total</th><th>Yr Uptime</th><th>Grade</th>
 </tr>
 </thead>
 <tbody>
