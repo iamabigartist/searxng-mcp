@@ -105,14 +105,6 @@ async function getBestSearXNGInstance(): Promise<string> {
 
       // ── Health filter (必要条件) ──
 
-      if (
-        inst.network_type !== "normal" ||
-        inst.http?.status_code !== 200 ||
-        inst.http?.error != null
-      ) {
-        continue;
-      }
-
       const engines = inst.engines || {};
       const vec = engineVector(engines);
 
