@@ -62,6 +62,34 @@ interface RankedInstance {
   uptimeMonth: number;
 }
 
+// Runtime failure tracking
+const failureTracker = new Map<string, { count: number; firstFail: number; reason: string }>();
+const COOLDOWN_ERROR = 5 * 60 * 1000;  // 5 min for general errors
+const COOLDOWN_RATELIMIT = 60 * 60 * 1000;  // 1 hour for rate limits
+
+function isInCooldown(url: string): boolean {
+  const entry = failureTracker.get(url);
+  if (!entry) return false;
+  const cooldown = entry.reason === '429' ? COOLDOWN_RATELIMIT : COOLDOWN_ERROR;
+  const elapsed = Date.now() - entry.firstFail;
+  if (elapsed > cooldown) {
+    failureTracker.delete(url);
+    return false;
+  }
+  return entry.count >= 3;
+}
+
+function recordFailure(url: string, statusCode: number): void {
+  const entry = failureTracker.get(url);
+  if (entry) {
+    entry.count++;
+    entry.reason = String(statusCode);
+  } else {
+    failureTracker.set(url, { count: 1, firstFail: Date.now(), reason: String(statusCode) });
+  }
+  console.error(`[SearXNG] Recorded failure #${entry?.count ?? 1} for ${url} (${statusCode})`);
+}
+
 // Function to fetch and rank SearXNG instances from searx.space
 async function getBestSearXNGInstance(): Promise<string> {
   try {
@@ -83,8 +111,7 @@ async function getBestSearXNGInstance(): Promise<string> {
         inst.http?.error != null ||
         inst.uptime?.uptimeDay !== 100 ||
         (inst.timing?.initial?.all?.value ?? 999) >= 1 ||
-        inst.timing?.initial?.success_percentage !== 100 ||
-        inst.timing?.search?.success_percentage !== 100
+        inst.timing?.initial?.success_percentage !== 100
       ) {
         continue;
       }
@@ -141,8 +168,11 @@ async function getBestSearXNGInstance(): Promise<string> {
       );
     }
 
+    // Pick from top 10, skip cooldown instances
     const topN = ranked.slice(0, Math.min(10, ranked.length));
-    const pick = topN[Math.floor(Math.random() * topN.length)];
+    const candidates = topN.filter(r => !isInCooldown(r.url));
+    const pool = candidates.length > 0 ? candidates : topN;
+    const pick = pool[Math.floor(Math.random() * pool.length)];
     console.error(`[SearXNG] Selected: ${pick.url}`);
     return pick.url;
   } catch (error) {
@@ -359,6 +389,14 @@ class SearXNGClient {
         };
       } catch (error: any) {
         console.error("[SearXNG Error]", error);
+        
+        // Record failure for cooldown tracking
+        if (axios.isAxiosError(error)) {
+          const status = error.response?.status ?? 0;
+          recordFailure(this.instanceUrl, status);
+        } else {
+          recordFailure(this.instanceUrl, 0);
+        }
         
         if (axios.isAxiosError(error)) {
           // Handle authentication errors

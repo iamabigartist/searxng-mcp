@@ -58,15 +58,18 @@ async function main() {
     const uy = inst.uptime?.uptimeYear ?? 0;
     const speed = inst.timing?.search?.all?.median ?? 999;
 
-    // Health checks
+    // Health checks (search_fail is soft — shows in status but doesn't disqualify)
     const checks = {
       httpError: inst.http?.error != null,
       uptimeDay: inst.uptime?.uptimeDay !== 100,
       initialSlow: (inst.timing?.initial?.all?.value ?? 999) >= 1,
       initFail: inst.timing?.initial?.success_percentage !== 100,
-      searchFail: inst.timing?.search?.success_percentage !== 100,
       noEngine: !vec[0] && !vec[1],
       lowUptime: um < 90 || uy < 90,
+    };
+
+    const softWarnings = {
+      searchFail: inst.timing?.search?.success_percentage !== 100,
     };
 
     const failedReasons = Object.entries(checks)
@@ -76,13 +79,20 @@ async function main() {
         if (k === 'uptimeDay') return `uptimeDay ${inst.uptime?.uptimeDay ?? 0}`;
         if (k === 'initialSlow') return 'slow-initial';
         if (k === 'initFail') return 'init-fail';
-        if (k === 'searchFail') return 'search-fail';
         if (k === 'noEngine') return 'no-G-no-B';
         if (k === 'lowUptime') return `uptime ${um}/${uy}`;
         return k;
       });
     
-    const healthy = failedReasons.length === 0;
+    // Soft warnings: show in status but don't disqualify
+    const warnings = Object.entries(softWarnings)
+      .filter(([, v]) => v)
+      .map(([k]) => {
+        if (k === 'searchFail') return 'search-fail';
+        return k;
+      });
+    
+    const healthy = failedReasons.length === 0;  // hard checks only
 
     allInstances.push({
       url,
@@ -95,7 +105,7 @@ async function main() {
       uptimeYear: uy,
       htmlGrade: inst.html?.grade || '?',
       healthy,
-      status: healthy ? '✓' : failedReasons.join(', '),
+      status: healthy ? (warnings.length > 0 ? '⚠ ' + warnings.join(', ') : '✓') : failedReasons.join(', ') + (warnings.length ? ' + ' + warnings.join(', ') : ''),
     });
   }
 
