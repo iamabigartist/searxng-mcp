@@ -1,6 +1,6 @@
 # SearXNG MCP Server
 
-> Forked from [tisDDM/searxng-mcp](https://github.com/tisDDM/searxng-mcp) (MIT).
+> Forked from [tisDDM/searxng-mcp](https://github.com/tisDDM/searxng-mcp) (MIT) | [中文](README.zh-CN.md)
 
 零配置 SearXNG 搜索 MCP 服务器。不设 `SEARXNG_URL` 时，自动从 [searx.space](https://searx.space) 拉取健康公共实例并随机选用。
 
