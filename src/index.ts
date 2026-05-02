@@ -27,56 +27,13 @@ const INSTANCES_LIST_URL = "https://searx.space/data/instances.json";
 // Core search engines that indicate a well-configured instance
 const CORE_ENGINES = ["google", "duckduckgo", "bing", "brave"];
 
-interface ScoredInstance {
+interface RankedInstance {
   url: string;
-  score: number;
-  speed: number;
-  uptime: number;
+  uptimeMonth: number;
   coreEngines: number;
   totalEngines: number;
+  speed: number;
   grade: string;
-}
-
-function scoreInstance(url: string, inst: any): ScoredInstance | null {
-  const timing = inst.timing || {};
-  const uptime = inst.uptime || {};
-  const engines = inst.engines || {};
-  const html = inst.html || {};
-
-  // Speed: normalize to 0-1 (faster = higher, cap at 2s)
-  const searchTime = timing.search?.all?.median ?? 2;
-  const speed = Math.max(0, 1 - searchTime / 2);
-
-  // Uptime: monthly as fraction
-  const uptimeMonth = (uptime.uptimeMonth ?? 100) / 100;
-
-  // Core engines: count Google/DuckDuckGo/Bing/Brave with 0% error rate
-  let coreOk = 0;
-  for (const eng of CORE_ENGINES) {
-    const ei = engines[eng];
-    if (ei && (typeof ei !== "object" || (ei.error_rate ?? 0) === 0)) {
-      coreOk++;
-    }
-  }
-  const engineScore = coreOk / CORE_ENGINES.length;
-
-  // Total engine count as bonus (more engines = more comprehensive)
-  const totalEngines = Object.keys(engines).length;
-  const breadthScore = Math.min(1, totalEngines / 250);
-
-  // HTML grade: V(vanilla)=1.0, C(custom)=0.9, F(fork)=0.7, else=0.5
-  const grade = html.grade || "?";
-  const gradeScore = grade === "V" ? 1.0 : grade === "C" ? 0.9 : grade === "F" ? 0.7 : 0.5;
-
-  // Weighted score
-  const score =
-    speed * 0.35 +          // response time matters most
-    uptimeMonth * 0.25 +    // reliability
-    engineScore * 0.25 +    // core engines working
-    breadthScore * 0.05 +   // engine diversity
-    gradeScore * 0.10;      // vanilla vs modified
-
-  return { url, score, speed, uptime: uptimeMonth, coreEngines: coreOk, totalEngines, grade };
 }
 
 // Function to fetch and rank SearXNG instances from searx.space
@@ -87,12 +44,12 @@ async function getBestSearXNGInstance(): Promise<string> {
     const data = response.data;
     const instances = data.instances || {};
 
-    const scored: ScoredInstance[] = [];
+    const ranked: RankedInstance[] = [];
 
     for (const [url, instance] of Object.entries(instances)) {
       const inst = instance as any;
 
-      // Filter: only healthy, fast, normal-network instances (same criteria)
+      // Filter: only healthy, fast, normal-network instances
       if (
         inst.network_type !== "normal" ||
         inst.http?.status_code !== 200 ||
@@ -106,45 +63,56 @@ async function getBestSearXNGInstance(): Promise<string> {
         continue;
       }
 
-      const result = scoreInstance(url, inst);
-      if (result) scored.push(result);
+      const timing = inst.timing || {};
+      const uptime = inst.uptime || {};
+      const engines = inst.engines || {};
+
+      // Core engines with 0% error rate
+      let coreOk = 0;
+      for (const eng of CORE_ENGINES) {
+        const ei = engines[eng];
+        if (ei && (typeof ei !== "object" || (ei.error_rate ?? 0) === 0)) {
+          coreOk++;
+        }
+      }
+
+      ranked.push({
+        url,
+        uptimeMonth: uptime.uptimeMonth ?? 0,
+        coreEngines: coreOk,
+        totalEngines: Object.keys(engines).length,
+        speed: timing.search?.all?.median ?? 999,
+        grade: inst.html?.grade || "?",
+      });
     }
 
-    // Sort by score descending
-    scored.sort((a, b) => b.score - a.score);
+    // Multi-key sort: uptime desc → engines desc → speed asc
+    ranked.sort((a, b) => {
+      if (b.uptimeMonth !== a.uptimeMonth) return b.uptimeMonth - a.uptimeMonth;
+      if (b.coreEngines !== a.coreEngines) return b.coreEngines - a.coreEngines;
+      if (b.totalEngines !== a.totalEngines) return b.totalEngines - a.totalEngines;
+      return a.speed - b.speed;
+    });
 
-    console.error(`[SearXNG] Found ${scored.length} healthy instances (from ${Object.keys(instances).length} total)`);
+    console.error(`[SearXNG] Found ${ranked.length} healthy instances (from ${Object.keys(instances).length} total)`);
 
-    if (scored.length === 0) {
+    if (ranked.length === 0) {
       throw new Error("No healthy SearXNG instances found on searx.space");
     }
 
     // Show top 5 for debugging
-    for (const s of scored.slice(0, 5)) {
+    for (const r of ranked.slice(0, 5)) {
       console.error(
-        `  [${s.score.toFixed(3)}] ${s.url} ` +
-        `speed=${s.speed.toFixed(2)} uptime=${s.uptime.toFixed(2)} ` +
-        `core=${s.coreEngines}/${CORE_ENGINES.length} ` +
-        `eng=${s.totalEngines} grade=${s.grade}`
+        `  upt=${r.uptimeMonth}% core=${r.coreEngines}/${CORE_ENGINES.length} ` +
+        `eng=${r.totalEngines} speed=${r.speed.toFixed(3)}s ${r.url}`
       );
     }
 
-    // Weighted random from top 10 to distribute load
-    const topN = scored.slice(0, Math.min(10, scored.length));
-    const totalWeight = topN.reduce((sum, s) => sum + s.score, 0);
-    let r = Math.random() * totalWeight;
-    for (const s of topN) {
-      r -= s.score;
-      if (r <= 0) {
-        console.error(`[SearXNG] Selected: ${s.url} (score ${s.score.toFixed(3)})`);
-        return s.url;
-      }
-    }
-
-    // Fallback: first in list
-    const best = scored[0];
-    console.error(`[SearXNG] Selected (fallback): ${best.url} (score ${best.score.toFixed(3)})`);
-    return best.url;
+    // Random from top 10 to distribute load across best instances
+    const topN = ranked.slice(0, Math.min(10, ranked.length));
+    const pick = topN[Math.floor(Math.random() * topN.length)];
+    console.error(`[SearXNG] Selected: ${pick.url}`);
+    return pick.url;
   } catch (error) {
     console.error("[SearXNG] Error fetching instances:", error);
     throw new Error("Failed to fetch SearXNG instances from searx.space");
