@@ -50,6 +50,8 @@ async function main() {
   const ranked = [];
 
   for (const [url, inst] of Object.entries(instances)) {
+    if (inst.network_type !== "normal") continue;
+
     const engines = inst.engines || {};
     const vec = engineVector(engines);
     const speed = inst.timing?.search?.all?.median ?? 999;
