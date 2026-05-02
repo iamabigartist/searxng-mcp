@@ -97,17 +97,24 @@ async function main() {
     `<span class="${v[i] ? 'ok' : 'fail'}">${e[0].toUpperCase()}</span>`
   ).join('');
 
+  // Compute max visible lengths from actual data
+  const urlLen = Math.max(...ranked.map(r => r.url.replace('https://','').length));
+  const instanceW = Math.min(urlLen * 8 + 40, 500); // ~8px per char, cap at 500px
+  const numW = 130; // "0.447s [-1]" fits in 130px
+  const coreW = 56;  // "GBBD" with letter-spacing fits in 56px
+  const shortW = 80; // "100.0%" or "256" fits in 80px
+
   const rows = ranked.map((r, i) => `
     <tr class="${i < 10 ? 'top10' : ''}">
-      <td class="r">${i + 1}</td>
+      <td>${i + 1}</td>
       <td class="url"><a href="${r.url}" target="_blank">${r.url.replace('https://','')}</a></td>
-      <td class="num">${r.speed.toFixed(3)}s <span class="bucket">[${r.speedBucket}]</span></td>
-      <td class="engines c">${engineLabel(r.engineVec)}</td>
-      <td class="num">${r.load != null ? r.load.toFixed(3) + 's <span class=\"bucket\">[' + r.loadBucket + ']</span>' : '-'}</td>
-      <td class="num">${r.uptimeMonth.toFixed(1)}% <span class="bucket">[${r.uptimeBucket}]</span></td>
-      <td class="num">${r.totalEngines}</td>
-      <td class="num">${r.uptimeYear.toFixed(1)}%</td>
-      <td class="c">${r.htmlGrade}</td>
+      <td>${r.speed.toFixed(3)}s <span class="bucket">[${r.speedBucket}]</span></td>
+      <td class="engines">${engineLabel(r.engineVec)}</td>
+      <td>${r.load != null ? r.load.toFixed(3) + 's <span class=\"bucket\">[' + r.loadBucket + ']</span>' : '-'}</td>
+      <td>${r.uptimeMonth.toFixed(1)}% <span class="bucket">[${r.uptimeBucket}]</span></td>
+      <td>${r.totalEngines}</td>
+      <td>${r.uptimeYear.toFixed(1)}%</td>
+      <td>${r.htmlGrade}</td>
     </tr>`).join('\n');
 
   const ts = new Date().toISOString().replace('T', ' ').slice(0, 19);
@@ -124,23 +131,18 @@ async function main() {
   body { font-family: system-ui, sans-serif; margin: 20px; background: #f5f5f5; }
   h1 { color: #333; }
   .meta { color: #666; margin-bottom: 20px; }
-  table { border-collapse: collapse; width: 100%; table-layout: fixed; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-  th { background: #333; color: white; padding: 8px 6px; font-size: 13px; position: sticky; top: 0; overflow: hidden; text-overflow: ellipsis; }
-  td { padding: 6px 6px; border-bottom: 1px solid #eee; font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
-  .r { text-align: right; }
-  .c { text-align: center; }
-  .l { text-align: left; }
+  table { border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  th { background: #333; color: white; padding: 8px 10px; font-size: 13px; position: sticky; top: 0; white-space: nowrap; }
+  td { padding: 6px 10px; border-bottom: 1px solid #eee; font-size: 13px; }
   tr.top10 { background: #e8f5e9; }
   tr:hover { background: #fff3e0; }
-  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .url { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .url a { color: #1976d2; text-decoration: none; }
   .engines { letter-spacing: 2px; white-space: nowrap; }
   .ok { color: #2e7d32; font-weight: bold; }
   .fail { color: #ccc; }
   .bucket { color: #999; font-size: 11px; }
   .legend { margin: 10px 0; font-size: 13px; color: #666; }
-  .legend code { background: #eee; padding: 1px 5px; border-radius: 3px; }
 </style>
 </head>
 <body>
@@ -156,19 +158,19 @@ async function main() {
 </div>
 <table>
 <colgroup>
-  <col style="width:36px">
-  <col style="width:auto">
-  <col style="width:130px">
-  <col style="width:52px">
-  <col style="width:120px">
-  <col style="width:120px">
-  <col style="width:72px">
-  <col style="width:72px">
-  <col style="width:44px">
+  <col style="width:40px">
+  <col style="width:${instanceW}px; max-width:500px">
+  <col style="width:${numW}px">
+  <col style="width:${coreW}px">
+  <col style="width:${numW}px">
+  <col style="width:${numW}px">
+  <col style="width:${shortW}px">
+  <col style="width:${shortW}px">
+  <col style="width:${shortW}px">
 </colgroup>
 <thead>
 <tr>
-  <th class="r">#</th><th>Instance</th><th class="r">Speed [log₅]</th><th class="c">Core</th><th class="r">Load [×10]</th><th class="r">Uptime [%]</th><th class="r">Total</th><th class="r">Yr Uptime</th><th class="c">Grade</th>
+  <th>#</th><th>Instance</th><th>Speed [log₅]</th><th>Core</th><th>Load [×10]</th><th>Uptime [%]</th><th>Total</th><th>Yr Uptime</th><th>Grade</th>
 </tr>
 </thead>
 <tbody>
