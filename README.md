@@ -1,237 +1,83 @@
 # SearXNG MCP Server
 
-<p align="center">
-  <img src="logo.png" alt="SearXNG MCP Logo" width="200" height="200">
-</p>
+> Forked from [tisDDM/searxng-mcp](https://github.com/tisDDM/searxng-mcp) (MIT).
 
-A Model Context Protocol (MCP) server that enables AI assistants to perform web searches using [SearXNG](https://github.com/searxng/searxng), a privacy-respecting metasearch engine. Works out-of-the-box with zero additional deployment by automatically selecting a random instance from [SearX.space](https://searx.space/), while also supporting private instances with basic authentication.
+零配置 SearXNG 搜索 MCP 服务器。不设 `SEARXNG_URL` 时，自动从 [searx.space](https://searx.space) 拉取健康公共实例并随机选用。
 
-## This project is deprecated. Its successor is **searxNcrawl** at https://github.com/DasDigitaleMomentum/searxNcrawl
+## 与原版区别
 
-## Deprecated
+| | 原版 | 此 Fork |
+|---|---|---|
+| 实例来源 | `instances.yml`（静态列表，无健康数据） | `searx.space/data/instances.json`（实时健康指标） |
+| 过滤条件 | 仅排除 hidden/onion | `network_type=normal` + `http 200` + `uptime 100%` + `response <1s` + `search success 100%` |
+| 可选实例数 | ~71（含不可用） | ~28（已过滤为健康） |
 
-This repository is deprecated in favor of **searxNcrawl**. The successor currently does **not** include round-robin instance selection (it is usually unreliable). If you file a suitable defect report, it can be added.
-
-## Features
-
-- **Zero-configuration setup**: Works immediately by using a random public instance from [SearX.space](https://searx.space/)
-- **Private instance support**: Connect to your own SearXNG instance with optional basic authentication
-- Perform web searches with customizable parameters
-- Support for multiple search engines
-- Privacy-focused search results
-- Markdown-formatted search results
-- Sensible default values for all parameters
-
-**CAVEAT - Public Instances might be unavailabe for this purpose and return "Request failed with status code 429"**
-
-## Installation
-
-### Prerequisites
-
-- Node.js (v16 or higher)
-- npm (v7 or higher)
-- Access to a SearXNG instance (self-hosted or public)
-
-
-### Install from source
+## 安装
 
 ```bash
-# Clone the repository
-git clone https://github.com/tisDDM/searxng-mcp.git
+git clone <your-fork-url>
 cd searxng-mcp
-
-# Install dependencies
-npm install
-
-# Build the project
-npm run build
+npm install && npm run build
 ```
 
-## Configuration
+## MCP 配置
 
-The SearXNG MCP server can be configured with the following environment variables:
+### OpenCode
 
-- `SEARXNG_URL` (optional): The URL of your SearXNG instance (e.g., `https://searx.example.com`). If not provided, a random public instance from [SearX.space](https://searx.space/) will be automatically selected, making the server usable with zero additional deployment.
-- `USE_RANDOM_INSTANCE` (optional): Set to "false" to disable random instance selection when no URL is provided. Default is "true".
-- `SEARXNG_USERNAME` (optional): Username for basic authentication when connecting to a private instance
-- `SEARXNG_PASSWORD` (optional): Password for basic authentication when connecting to a private instance
-
-You can set these environment variables in a `.env` file in the root directory of the project:
-
-```
-SEARXNG_URL=https://searx.example.com
-SEARXNG_USERNAME=your_username
-SEARXNG_PASSWORD=your_password
-```
-
-## Usage
-
-### Running the server
-
-```bash
-# If installed globally
-searxngmcp
-
-# If installed from source
-node build/index.js
-```
-
-### Integrating with Claude Desktop
-
-1. Open Claude Desktop
-2. Go to Settings > MCP Servers
-3. Add a new MCP server with the following configuration:
-   ```json
-   {
-     "mcpServers": {
-       "searxngmcp": {
-         "command": "searxngmcp",
-         "env": {
-           // Optional: If not provided, a random public instance will be used
-           "SEARXNG_URL": "https://searx.example.com",
-           // Optional: Only needed for private instances with authentication
-           "SEARXNG_USERNAME": "your_username",
-           "SEARXNG_PASSWORD": "your_password"
-         },
-         "disabled": false,
-         "autoApprove": []
-       }
-     }
-   }
-   ```
-
-### Integrating with Claude in VSCode
-
-1. Open VSCode
-2. Go to Settings > Extensions > Claude > MCP Settings
-3. Add a new MCP server with the following configuration:
-   ```json
-   {
-     "mcpServers": {
-       "searxngmcp": {
-         "command": "node",
-         "args": ["/path/to/searxng-mcp/build/index.js"],
-         "env": {
-           // Optional: If not provided, a random public instance will be used
-           "SEARXNG_URL": "https://searx.example.com",
-           // Optional: Only needed for private instances with authentication
-           "SEARXNG_USERNAME": "your_username",
-           "SEARXNG_PASSWORD": "your_password"
-         },
-         "disabled": false,
-         "autoApprove": []
-       }
-     }
-   }
-   ```
-
-## Usage with Smolagents
-
-SearXNG MCP can be easily integrated with Smolagents, a lightweight framework for building AI agents. This allows you to create powerful research agents that can search the web and process the results:
-
-```python
-from smolagents import CodeAgent, LiteLLMModel, ToolCollection
-from mcp import StdioServerParameters
-
-# Configure the SearXNG MCP server
-server_parameters = StdioServerParameters(
-    command="node",
-    args=["path/to/searxng-mcp/build/index.js"],
-    env={
-        "SEARXNG_URL": "https://your-searxng-instance.com",
-        "SEARXNG_USERNAME": "your_username",  # Optional
-        "SEARXNG_PASSWORD": "your_password"   # Optional
+```jsonc
+{
+  "mcp": {
+    "searxng": {
+      "type": "local",
+      "command": ["node", "/path/to/searxng-mcp/build/index.js"]
     }
-)
-
-# Create a tool collection from the MCP server
-with ToolCollection.from_mcp(server_parameters) as tool_collection:
-    # Initialize your LLM model
-    model = LiteLLMModel(
-        model_id="your-model-id",
-        api_key="your-api-key",
-        temperature=0.7
-    )
-    
-    # Create an agent with the search tools
-    search_agent = CodeAgent(
-        name="search_agent",
-        tools=tool_collection.tools,
-        model=model
-    )
-    
-    # Run the agent with a search prompt
-    result = search_agent.run(
-        "Perform a search about: 'climate change solutions' and summarize the top 5 results."
-    )
-    
-    print(result)
+  }
+}
 ```
 
-## Available Tools
+### Claude Desktop / VS Code
 
-### searxngsearch
-
-Perform web searches using SearXNG, a privacy-respecting metasearch engine. Returns relevant web content with customizable parameters.
-
-#### Parameters
-
-| Parameter   | Type             | Description                                                                      | Default     | Required |
-|-------------|------------------|----------------------------------------------------------------------------------|-------------|---------|
-| query       | string           | Search query                                                                     | -           | Yes      |
-| language    | string           | Language code for search results (e.g., 'en', 'de', 'fr')                        | 'en'        | No       |
-| time_range  | string           | Time range for search results. Options: 'day', 'week', 'month', 'year'           | null        | No       |
-| categories  | array of strings | Categories to search in (e.g., 'general', 'images', 'news')                      | null        | No       |
-| engines     | array of strings | Specific search engines to use                                                   | null        | No       |
-| safesearch  | number           | Safe search level: 0 (off), 1 (moderate), 2 (strict)                             | 1           | No       |
-| pageno      | number           | Page number for results. Must be minimum 1                                       | 1           | No       |
-| max_results | number           | Maximum number of search results to return. Range: 1-50                          | 10          | No       |
-
-#### Example
-
-```javascript
-// Example request
-const result = await client.callTool('searxngsearch', {
-  query: 'climate change solutions',
-  language: 'en',
-  time_range: 'year',
-  categories: ['general', 'news'],
-  safesearch: 1,
-  max_results: 5
-});
+```json
+{
+  "mcpServers": {
+    "searxng": {
+      "command": "node",
+      "args": ["/path/to/searxng-mcp/build/index.js"]
+    }
+  }
+}
 ```
 
-## Development
+## 环境变量
 
-### Setup
+| 变量 | 必填 | 默认 | 说明 |
+|---|---|---|---|
+| `SEARXNG_URL` | 否 | 自动从 searx.space 获取 | 指定自托管实例 |
+| `USE_RANDOM_INSTANCE` | 否 | `true` | 设为 `false` 时必须提供 `SEARXNG_URL` |
+| `SEARXNG_USERNAME` | 否 | — | 自托管实例的 Basic Auth |
+| `SEARXNG_PASSWORD` | 否 | — | 自托管实例的 Basic Auth |
 
-```bash
-# Clone the repository
-git clone https://github.com/tisDDM/searxng-mcp.git
-cd searxng-mcp
+## 调参须知
 
-# Install dependencies
-npm install
-```
+- **公共实例可能返回 429**：每个实例有各自限流策略，遇到 429 时重启 MCP 会话即可换一个实例
+- **响应速度波动**：不同实例地理位置和服务器配置不同，首次搜索可能略慢
+- **健康过滤可调整**：修改 `src/index.ts` 中 `getRandomSearXNGInstance()` 的过滤条件（如降低 uptime 阈值以增加候选实例）
+- **自托管推荐**：如果需要稳定搜索，建议自托管 SearXNG 实例并设置 `SEARXNG_URL`
 
-### Build
+## 工具
 
-```bash
-npm run build
-```
+### `searxngsearch`
 
-### Watch mode (for development)
-
-```bash
-npm run watch
-```
-
-### Testing with MCP Inspector
-
-```bash
-npm run inspector
-```
+| 参数 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `query` | string | — | 搜索词 |
+| `language` | string | `en` | 语言代码 |
+| `time_range` | string | — | `day` / `week` / `month` / `year` |
+| `categories` | string[] | — | `general`, `images`, `news` 等 |
+| `engines` | string[] | — | 指定搜索引擎 |
+| `safesearch` | 0/1/2 | `1` | 安全搜索等级 |
+| `max_results` | 1-50 | `10` | 返回结果数 |
 
 ## License
 
-MIT
+MIT — 原始版权归 [tisDDM](https://github.com/tisDDM)，修改部分见上方区别。
