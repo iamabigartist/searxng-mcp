@@ -125,23 +125,24 @@ async function main() {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SearXNG Instance Ranking — ${ts}</title>
 <style>
+  *, *::before, *::after { box-sizing: border-box; }
   body { font-family: system-ui, sans-serif; margin: 20px; background: #f5f5f5; }
   h1 { color: #333; }
   .meta { color: #666; margin-bottom: 20px; }
-  table { border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-  th { background: #333; color: white; padding: 8px 10px; font-size: 13px; position: sticky; top: 0; white-space: nowrap; }
-  td { padding: 6px 10px; border-bottom: 1px solid #eee; font-size: 13px; white-space: nowrap; }
-  th:first-child, td:first-child { width: 32px; }
-  th:nth-child(3), td:nth-child(3) { min-width: 124px; }
-  th:nth-child(4), td:nth-child(4) { min-width: 50px; }
-  th:nth-child(5), td:nth-child(5) { min-width: 124px; }
-  th:nth-child(6), td:nth-child(6) { min-width: 124px; }
-  th:nth-child(7), td:nth-child(7) { min-width: 56px; }
-  th:nth-child(8), td:nth-child(8) { min-width: 72px; }
-  th:nth-child(9), td:nth-child(9) { min-width: 44px; }
+  table { table-layout: fixed; width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  th { background: #333; color: white; padding: 8px 10px; font-size: 13px; position: sticky; top: 0; }
+  td { padding: 6px 10px; border-bottom: 1px solid #eee; font-size: 13px; }
+  th:first-child { width: 36px; }
+  th:nth-child(3) { width: 128px; }
+  th:nth-child(4) { width: 56px; }
+  th:nth-child(5) { width: 128px; }
+  th:nth-child(6) { width: 128px; }
+  th:nth-child(7) { width: 60px; }
+  th:nth-child(8) { width: 76px; }
+  th:nth-child(9) { width: 52px; }
   tr.top10 { background: #e8f5e9; }
   tr:hover { background: #fff3e0; }
-  .url { max-width: ${urlMaxW}px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .url { max-width: ${urlMaxW}px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
   .url a { color: #1976d2; text-decoration: none; }
   .engines { letter-spacing: 2px; white-space: nowrap; }
   .ok { color: #2e7d32; font-weight: bold; }
