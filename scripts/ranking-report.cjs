@@ -59,14 +59,14 @@ async function main() {
     const uy = inst.uptime?.uptimeYear ?? 0;
     const speed = inst.timing?.search?.all?.median ?? 999;
 
-    // Health checks (search_fail is soft — shows in status but doesn't disqualify)
+    // Health checks (soft-only now for searx.space checker metrics)
     const checks = {
       httpError: inst.http?.error != null,
-      initialSlow: (inst.timing?.initial?.all?.value ?? 999) >= 1,
-      initFail: inst.timing?.initial?.success_percentage !== 100,
     };
 
     const softWarnings = {
+      initialSlow: (inst.timing?.initial?.all?.value ?? 999) >= 1,
+      initFail: inst.timing?.initial?.success_percentage !== 100,
       searchFail: inst.timing?.search?.success_percentage !== 100,
     };
 
@@ -74,8 +74,6 @@ async function main() {
       .filter(([, v]) => v)
       .map(([k]) => {
         if (k === 'httpError') return 'http-error';
-        if (k === 'initialSlow') return 'slow-initial';
-        if (k === 'initFail') return 'init-fail';
         return k;
       });
     
@@ -84,6 +82,8 @@ async function main() {
       .filter(([, v]) => v)
       .map(([k]) => {
         if (k === 'searchFail') return 'search-fail';
+        if (k === 'initialSlow') return 'slow-init';
+        if (k === 'initFail') return 'init-fail';
         return k;
       });
     

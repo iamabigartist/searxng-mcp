@@ -108,9 +108,7 @@ async function getBestSearXNGInstance(): Promise<string> {
       if (
         inst.network_type !== "normal" ||
         inst.http?.status_code !== 200 ||
-        inst.http?.error != null ||
-        (inst.timing?.initial?.all?.value ?? 999) >= 1 ||
-        inst.timing?.initial?.success_percentage !== 100
+        inst.http?.error != null
       ) {
         continue;
       }
