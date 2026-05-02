@@ -61,7 +61,6 @@ async function main() {
     // Health checks (search_fail is soft — shows in status but doesn't disqualify)
     const checks = {
       httpError: inst.http?.error != null,
-      uptimeDay: inst.uptime?.uptimeDay !== 100,
       initialSlow: (inst.timing?.initial?.all?.value ?? 999) >= 1,
       initFail: inst.timing?.initial?.success_percentage !== 100,
       noEngine: !vec[0] && !vec[1],
@@ -75,7 +74,6 @@ async function main() {
       .filter(([, v]) => v)
       .map(([k]) => {
         if (k === 'httpError') return 'http-error';
-        if (k === 'uptimeDay') return `uptimeDay ${inst.uptime?.uptimeDay ?? 0}`;
         if (k === 'initialSlow') return 'slow-initial';
         if (k === 'initFail') return 'init-fail';
         if (k === 'noEngine') return 'no-G-no-B';
