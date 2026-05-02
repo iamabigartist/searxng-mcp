@@ -56,12 +56,9 @@ interface RankedInstance {
   url: string;
   speedBucket: number;
   engineVec: boolean[];
-  loadBucket: number;
   uptimeBucket: number;
   totalEngines: number;
-  // raw values for debug
   speed: number;
-  load: number;
   uptimeMonth: number;
 }
 
@@ -104,17 +101,14 @@ async function getBestSearXNGInstance(): Promise<string> {
       if (um < 90 || uy < 90) continue;
 
       const speed = inst.timing?.search?.all?.median ?? 999;
-      const load = inst.timing?.search?.load?.median ?? 99;
 
       ranked.push({
         url,
         speedBucket: logHalfBucket(speed),
         engineVec: vec,
-        loadBucket: Math.round(load * 10),
         uptimeBucket: Math.round(um),
         totalEngines: Object.keys(engines).length,
         speed,
-        load,
         uptimeMonth: um,
       });
     }
@@ -126,11 +120,9 @@ async function getBestSearXNGInstance(): Promise<string> {
       // 2. Engine vector (lexicographic: G > B(rave) > B(ing) > D)
       const ec = compareEngineVectors(a.engineVec, b.engineVec);
       if (ec !== 0) return ec;
-      // 3. Load bucket (ascending — less load first)
-      if (a.loadBucket !== b.loadBucket) return a.loadBucket - b.loadBucket;
-      // 4. Uptime bucket (descending — higher uptime first)
+      // 3. Uptime bucket (descending — higher uptime first)
       if (b.uptimeBucket !== a.uptimeBucket) return b.uptimeBucket - a.uptimeBucket;
-      // 5. Total engines (descending)
+      // 4. Total engines (descending)
       return b.totalEngines - a.totalEngines;
     });
 
@@ -144,8 +136,8 @@ async function getBestSearXNGInstance(): Promise<string> {
     for (const r of ranked.slice(0, 5)) {
       console.error(
         `  spd=${r.speedBucket} eng=[${engineLabel(r.engineVec)}] ` +
-        `load=${r.loadBucket} upt=${r.uptimeBucket} ` +
-        `(${r.speed.toFixed(3)}s/${r.load.toFixed(3)}s/${r.uptimeMonth.toFixed(1)}%) ${r.url}`
+        `upt=${r.uptimeBucket} ` +
+        `(${r.speed.toFixed(3)}s/${r.uptimeMonth.toFixed(1)}%) ${r.url}`
       );
     }
 

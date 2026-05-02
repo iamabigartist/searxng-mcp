@@ -66,17 +66,14 @@ async function main() {
     if (um < 90 || uy < 90) continue;
 
     const speed = inst.timing?.search?.all?.median ?? 999;
-    const load = inst.timing?.search?.load?.median ?? null;
 
     ranked.push({
       url,
       speedBucket: logHalfBucket(speed),
       engineVec: vec,
-      loadBucket: load != null ? Math.round(load * 10) : null,
       uptimeBucket: Math.round(um),
       totalEngines: Object.keys(engines).length,
       speed,
-      load,
       uptimeMonth: um,
       uptimeYear: uy,
       htmlGrade: inst.html?.grade || '?',
@@ -87,8 +84,6 @@ async function main() {
     if (b.speedBucket !== a.speedBucket) return b.speedBucket - a.speedBucket;
     const ec = compareEngineVectors(a.engineVec, b.engineVec);
     if (ec !== 0) return ec;
-    const la = a.loadBucket ?? 999, lb = b.loadBucket ?? 999;
-    if (la !== lb) return la - lb;
     if (b.uptimeBucket !== a.uptimeBucket) return b.uptimeBucket - a.uptimeBucket;
     return b.totalEngines - a.totalEngines;
   });
@@ -107,10 +102,9 @@ async function main() {
       <td class="url"><a href="${r.url}" target="_blank">${r.url.replace('https://','')}</a></td>
       <td>${r.speed.toFixed(3)}s <span class="bucket">[${r.speedBucket}]</span></td>
       <td class="engines">${engineLabel(r.engineVec)}</td>
-      <td>${r.load != null ? r.load.toFixed(3) + 's <span class=\"bucket\">[' + r.loadBucket + ']</span>' : '-'}</td>
-      <td>${r.uptimeMonth.toFixed(1)}% <span class="bucket">[${r.uptimeBucket}]</span></td>
+      <td>${r.uptimeMonth.toFixed(1)} <span class="bucket">[${r.uptimeBucket}]</span></td>
       <td>${r.totalEngines}</td>
-      <td>${r.uptimeYear.toFixed(1)}%</td>
+      <td>${r.uptimeYear.toFixed(1)}</td>
       <td>${r.htmlGrade}</td>
     </tr>`).join('\n');
 
@@ -132,15 +126,14 @@ async function main() {
   table { table-layout: fixed; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
   th { background: #333; color: white; padding: 8px 10px; font-size: 13px; position: sticky; top: 0; text-align: left; }
   td { padding: 6px 10px; border-bottom: 1px solid #eee; font-size: 13px; overflow: hidden; text-overflow: ellipsis; text-align: left; }
-  th:first-child { width: 40px; }
-  th:nth-child(2) { width: ${urlMaxW}px; }
+   th:first-child { width: 40px; }
+   th:nth-child(2) { width: ${urlMaxW}px; }
    th:nth-child(3) { width: 140px; }
    th:nth-child(4) { width: 60px; }
-   th:nth-child(5) { width: 140px; }
-   th:nth-child(6) { width: 150px; }
-   th:nth-child(7) { width: 60px; }
-   th:nth-child(8) { width: 140px; }
-   th:nth-child(9) { width: 60px; }
+   th:nth-child(5) { width: 150px; }
+   th:nth-child(6) { width: 60px; }
+   th:nth-child(7) { width: 140px; }
+   th:nth-child(8) { width: 60px; }
   tr.top10 { background: #e8f5e9; }
   tr:hover { background: #fff3e0; }
   .url a { color: #1976d2; text-decoration: none; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -165,7 +158,7 @@ async function main() {
 <table>
 <thead>
 <tr>
-   <th>#</th><th>Instance</th><th>Speed [log₀.₅]</th><th>Core</th><th>Load [×10]</th><th>Uptime Monthly</th><th>Total</th><th>Uptime Yearly</th><th>Grade</th>
+   <th>#</th><th>Instance</th><th>Speed [log₀.₅]</th><th>Core</th><th>Uptime Monthly</th><th>Total</th><th>Uptime Yearly</th><th>Grade</th>
 </tr>
 </thead>
 <tbody>
