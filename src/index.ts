@@ -47,9 +47,9 @@ function compareEngineVectors(a: boolean[], b: boolean[]): number {
   return 0;
 }
 
-/** log5 with rounding */
-function log5Bucket(v: number): number {
-  return Math.round(Math.log(v) / Math.log(5));
+/** log0.5 with rounding */
+function logHalfBucket(v: number): number {
+  return Math.round(Math.log(v) / Math.log(0.5));
 }
 
 interface RankedInstance {
@@ -108,7 +108,7 @@ async function getBestSearXNGInstance(): Promise<string> {
 
       ranked.push({
         url,
-        speedBucket: log5Bucket(speed),
+        speedBucket: logHalfBucket(speed),
         engineVec: vec,
         loadBucket: Math.round(load * 10),
         uptimeBucket: Math.round(um),
@@ -121,8 +121,8 @@ async function getBestSearXNGInstance(): Promise<string> {
 
     // ── Ranking (择优条件) ──
     ranked.sort((a, b) => {
-      // 1. Speed bucket (log5, ascending — faster first)
-      if (a.speedBucket !== b.speedBucket) return a.speedBucket - b.speedBucket;
+      // 1. Speed bucket (log0.5, descending — faster first)
+      if (b.speedBucket !== a.speedBucket) return b.speedBucket - a.speedBucket;
       // 2. Engine vector (lexicographic: G > B(rave) > B(ing) > D)
       const ec = compareEngineVectors(a.engineVec, b.engineVec);
       if (ec !== 0) return ec;

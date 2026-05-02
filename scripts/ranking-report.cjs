@@ -28,8 +28,8 @@ function compareEngineVectors(a, b) {
   return 0;
 }
 
-function log5Bucket(v) {
-  return Math.round(Math.log(v) / Math.log(5));
+function logHalfBucket(v) {
+  return Math.round(Math.log(v) / Math.log(0.5));
 }
 
 function fetchJSON(url) {
@@ -70,7 +70,7 @@ async function main() {
 
     ranked.push({
       url,
-      speedBucket: log5Bucket(speed),
+      speedBucket: logHalfBucket(speed),
       engineVec: vec,
       loadBucket: load != null ? Math.round(load * 10) : null,
       uptimeBucket: Math.round(um),
@@ -84,7 +84,7 @@ async function main() {
   }
 
   ranked.sort((a, b) => {
-    if (a.speedBucket !== b.speedBucket) return a.speedBucket - b.speedBucket;
+    if (b.speedBucket !== a.speedBucket) return b.speedBucket - a.speedBucket;
     const ec = compareEngineVectors(a.engineVec, b.engineVec);
     if (ec !== 0) return ec;
     const la = a.loadBucket ?? 999, lb = b.loadBucket ?? 999;
@@ -165,7 +165,7 @@ async function main() {
 <table>
 <thead>
 <tr>
-   <th>#</th><th>Instance</th><th>Speed [log₅]</th><th>Core</th><th>Load [×10]</th><th>Uptime Monthly</th><th>Total</th><th>Uptime Yearly</th><th>Grade</th>
+   <th>#</th><th>Instance</th><th>Speed [log₀.₅]</th><th>Core</th><th>Load [×10]</th><th>Uptime Monthly</th><th>Total</th><th>Uptime Yearly</th><th>Grade</th>
 </tr>
 </thead>
 <tbody>
