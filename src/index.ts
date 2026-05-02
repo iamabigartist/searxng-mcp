@@ -26,7 +26,6 @@ const INSTANCES_LIST_URL = "https://searx.space/data/instances.json";
 
 // Engine priority (lexicographic order for comparison)
 // Google > Brave > Bing > DuckDuckGo
-// At least one of Google or Brave is required (hard filter)
 const ENGINE_PRIORITY = ["google", "brave", "bing", "duckduckgo"] as const;
 
 /** Check if an engine is healthy (present and 0% error rate) */
@@ -36,11 +35,6 @@ function engineOk(engines: Record<string, any>, name: string): boolean {
   return typeof ei !== "object" || (ei.error_rate ?? 0) === 0;
 }
 
-/**
- * Lexicographic engine comparison.
- * Returns array of booleans [G, B, B, D] where true=available.
- * For sorting: compare index-by-index like alphabet — first difference wins.
- */
 function engineVector(engines: Record<string, any>): boolean[] {
   return ENGINE_PRIORITY.map((e) => engineOk(engines, e));
 }
@@ -48,27 +42,27 @@ function engineVector(engines: Record<string, any>): boolean[] {
 /** Compare two engine vectors lexicographically. Returns <0 if a ranks higher. */
 function compareEngineVectors(a: boolean[], b: boolean[]): number {
   for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return a[i] ? -1 : 1; // true (available) ranks above false
+    if (a[i] !== b[i]) return a[i] ? -1 : 1;
   }
   return 0;
 }
 
-/** HTML grade priority: V=0 C=1 F=2 else=3 */
-function gradeRank(g: string): number {
-  if (g === "V") return 0;
-  if (g === "C") return 1;
-  if (g === "F") return 2;
-  return 3;
+/** log5 with rounding */
+function log5Bucket(v: number): number {
+  return Math.round(Math.log(v) / Math.log(5));
 }
 
 interface RankedInstance {
   url: string;
-  uptimeMonth: number;
-  uptimeYear: number;
-  engineVec: boolean[];   // [G, B, B, D]
+  speedBucket: number;
+  engineVec: boolean[];
+  loadBucket: number;
+  uptimeBucket: number;
   totalEngines: number;
-  gradeRank: number;      // 0=V 1=C 2=F
+  // raw values for debug
   speed: number;
+  load: number;
+  uptimeMonth: number;
 }
 
 // Function to fetch and rank SearXNG instances from searx.space
@@ -84,14 +78,14 @@ async function getBestSearXNGInstance(): Promise<string> {
     for (const [url, instance] of Object.entries(instances)) {
       const inst = instance as any;
 
-      // Filter: only healthy, fast, normal-network instances
+      // ── Health filter (必要条件) ──
+
       if (
         inst.network_type !== "normal" ||
         inst.http?.status_code !== 200 ||
         inst.http?.error != null ||
         inst.uptime?.uptimeDay !== 100 ||
         (inst.timing?.initial?.all?.value ?? 999) >= 1 ||
-        (inst.timing?.search?.all?.median ?? 999) >= 1 ||
         inst.timing?.initial?.success_percentage !== 100 ||
         inst.timing?.search?.success_percentage !== 100
       ) {
@@ -101,36 +95,43 @@ async function getBestSearXNGInstance(): Promise<string> {
       const engines = inst.engines || {};
       const vec = engineVector(engines);
 
-      // Hard filter: must have Google OR Brave
+      // Hard requirement: Google or Brave must be available
       if (!vec[0] && !vec[1]) continue;
 
       const uptime = inst.uptime || {};
+      const um = uptime.uptimeMonth ?? 0;
+      const uy = uptime.uptimeYear ?? 0;
+      if (um < 90 || uy < 90) continue;
+
+      const speed = inst.timing?.search?.all?.median ?? 999;
+      const load = inst.timing?.search?.load?.median ?? 99;
+
       ranked.push({
         url,
-        uptimeMonth: uptime.uptimeMonth ?? 0,
-        uptimeYear: uptime.uptimeYear ?? 0,
+        speedBucket: log5Bucket(speed),
         engineVec: vec,
+        loadBucket: Math.round(load * 10),
+        uptimeBucket: Math.round(um),
         totalEngines: Object.keys(engines).length,
-        gradeRank: gradeRank(inst.html?.grade || "?"),
-        speed: inst.timing?.search?.all?.median ?? 999,
+        speed,
+        load,
+        uptimeMonth: um,
       });
     }
 
-    // Multi-key sort (all descending priority, speed ascending)
+    // ── Ranking (择优条件) ──
     ranked.sort((a, b) => {
-      // 1. Monthly uptime
-      if (b.uptimeMonth !== a.uptimeMonth) return b.uptimeMonth - a.uptimeMonth;
-      // 2. Yearly uptime
-      if (b.uptimeYear !== a.uptimeYear) return b.uptimeYear - a.uptimeYear;
-      // 3. Engine vector (lexicographic: Google > Brave > Bing > DDG)
+      // 1. Speed bucket (log5, ascending — faster first)
+      if (a.speedBucket !== b.speedBucket) return a.speedBucket - b.speedBucket;
+      // 2. Engine vector (lexicographic: G > B(rave) > B(ing) > D)
       const ec = compareEngineVectors(a.engineVec, b.engineVec);
       if (ec !== 0) return ec;
-      // 4. Total engine count
-      if (b.totalEngines !== a.totalEngines) return b.totalEngines - a.totalEngines;
-      // 5. HTML grade (V > C > F)
-      if (a.gradeRank !== b.gradeRank) return a.gradeRank - b.gradeRank;
-      // 6. Speed (faster first)
-      return a.speed - b.speed;
+      // 3. Load bucket (ascending — less load first)
+      if (a.loadBucket !== b.loadBucket) return a.loadBucket - b.loadBucket;
+      // 4. Uptime bucket (descending — higher uptime first)
+      if (b.uptimeBucket !== a.uptimeBucket) return b.uptimeBucket - a.uptimeBucket;
+      // 5. Total engines (descending)
+      return b.totalEngines - a.totalEngines;
     });
 
     console.error(`[SearXNG] Found ${ranked.length} healthy instances (from ${Object.keys(instances).length} total)`);
@@ -139,16 +140,15 @@ async function getBestSearXNGInstance(): Promise<string> {
       throw new Error("No healthy SearXNG instances found on searx.space");
     }
 
-    // Show top 5 for debugging
     const engineLabel = (v: boolean[]) => ENGINE_PRIORITY.map((e, i) => v[i] ? e[0].toUpperCase() : '-').join('');
     for (const r of ranked.slice(0, 5)) {
       console.error(
-        `  upt=${r.uptimeMonth}%/${r.uptimeYear}% eng=[${engineLabel(r.engineVec)}] ` +
-        `total=${r.totalEngines} speed=${r.speed.toFixed(3)}s ${r.url}`
+        `  spd=${r.speedBucket} eng=[${engineLabel(r.engineVec)}] ` +
+        `load=${r.loadBucket} upt=${r.uptimeBucket} ` +
+        `(${r.speed.toFixed(3)}s/${r.load.toFixed(3)}s/${r.uptimeMonth.toFixed(1)}%) ${r.url}`
       );
     }
 
-    // Random from top 10 to distribute load
     const topN = ranked.slice(0, Math.min(10, ranked.length));
     const pick = topN[Math.floor(Math.random() * topN.length)];
     console.error(`[SearXNG] Selected: ${pick.url}`);
