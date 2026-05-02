@@ -46,28 +46,45 @@ async function main() {
   const data = await fetchJSON('https://searx.space/data/instances.json');
   const instances = data.instances || {};
 
-  const ranked = [];
+  const allInstances = [];
 
   for (const [url, inst] of Object.entries(instances)) {
     if (inst.network_type !== "normal") continue;
     if (inst.http?.status_code !== 200) continue;
-    if (inst.http?.error != null) continue;
-    if (inst.uptime?.uptimeDay !== 100) continue;
-    if ((inst.timing?.initial?.all?.value ?? 999) >= 1) continue;
-    if (inst.timing?.initial?.success_percentage !== 100) continue;
-    if (inst.timing?.search?.success_percentage !== 100) continue;
 
     const engines = inst.engines || {};
     const vec = engineVector(engines);
-    if (!vec[0] && !vec[1]) continue;
-
     const um = inst.uptime?.uptimeMonth ?? 0;
     const uy = inst.uptime?.uptimeYear ?? 0;
-    if (um < 90 || uy < 90) continue;
-
     const speed = inst.timing?.search?.all?.median ?? 999;
 
-    ranked.push({
+    // Health checks
+    const checks = {
+      httpError: inst.http?.error != null,
+      uptimeDay: inst.uptime?.uptimeDay !== 100,
+      initialSlow: (inst.timing?.initial?.all?.value ?? 999) >= 1,
+      initFail: inst.timing?.initial?.success_percentage !== 100,
+      searchFail: inst.timing?.search?.success_percentage !== 100,
+      noEngine: !vec[0] && !vec[1],
+      lowUptime: um < 90 || uy < 90,
+    };
+
+    const failedReasons = Object.entries(checks)
+      .filter(([, v]) => v)
+      .map(([k]) => {
+        if (k === 'httpError') return 'http-error';
+        if (k === 'uptimeDay') return `uptimeDay ${inst.uptime?.uptimeDay ?? 0}`;
+        if (k === 'initialSlow') return 'slow-initial';
+        if (k === 'initFail') return 'init-fail';
+        if (k === 'searchFail') return 'search-fail';
+        if (k === 'noEngine') return 'no-G-no-B';
+        if (k === 'lowUptime') return `uptime ${um}/${uy}`;
+        return k;
+      });
+    
+    const healthy = failedReasons.length === 0;
+
+    allInstances.push({
       url,
       speedBucket: logHalfBucket(speed),
       engineVec: vec,
@@ -77,28 +94,38 @@ async function main() {
       uptimeMonth: um,
       uptimeYear: uy,
       htmlGrade: inst.html?.grade || '?',
+      healthy,
+      status: healthy ? '✓' : failedReasons.join(', '),
     });
   }
 
-  ranked.sort((a, b) => {
+  const healthyList = allInstances.filter(r => r.healthy);
+  const unhealthyList = allInstances.filter(r => !r.healthy);
+
+  const sortFn = (a, b) => {
     if (b.speedBucket !== a.speedBucket) return b.speedBucket - a.speedBucket;
     const ec = compareEngineVectors(a.engineVec, b.engineVec);
     if (ec !== 0) return ec;
     if (b.uptimeBucket !== a.uptimeBucket) return b.uptimeBucket - a.uptimeBucket;
     return b.totalEngines - a.totalEngines;
-  });
+  };
+
+  healthyList.sort(sortFn);
+  unhealthyList.sort(sortFn);
 
   const engineLabel = (v) => ENGINE_PRIORITY.map((e, i) =>
     `<span class="${v[i] ? 'ok' : 'fail'}">${e[0].toUpperCase()}</span>`
   ).join('');
 
   // Max URL length for capping instance column width
-  const maxUrlChars = Math.max(...ranked.map(r => r.url.replace('https://','').length));
+  const allUrls = [...healthyList, ...unhealthyList];
+  const maxUrlChars = Math.max(...allUrls.map(r => r.url.replace('https://','').length));
   const urlMaxW = Math.min(maxUrlChars * 8 + 40, 520);
 
-  const rows = ranked.map((r, i) => `
-    <tr class="${i < 10 ? 'top10' : ''}">
-      <td>${i + 1}</td>
+  function renderRows(list, startIdx) {
+    return list.map((r, i) => `
+    <tr class="${i < 10 && r.healthy ? 'top10' : ''} ${r.healthy ? '' : 'unhealthy'}">
+      <td>${startIdx + i + 1}</td>
       <td class="url"><a href="${r.url}" target="_blank">${r.url.replace('https://','')}</a></td>
       <td>${r.speed.toFixed(3)}s <span class="bucket">[${r.speedBucket}]</span></td>
       <td class="engines">${engineLabel(r.engineVec)}</td>
@@ -106,7 +133,9 @@ async function main() {
       <td>${r.totalEngines}</td>
       <td>${r.uptimeYear.toFixed(1)}</td>
       <td>${r.htmlGrade}</td>
+      <td class="status">${r.status}</td>
     </tr>`).join('\n');
+  }
 
   const ts = new Date().toISOString().replace('T', ' ').slice(0, 19);
 
@@ -130,46 +159,61 @@ async function main() {
    th:nth-child(2) { width: ${urlMaxW}px; }
    th:nth-child(3) { width: 140px; }
    th:nth-child(4) { width: 60px; }
-   th:nth-child(5) { width: 150px; }
+   th:nth-child(5) { width: 120px; }
    th:nth-child(6) { width: 60px; }
-   th:nth-child(7) { width: 140px; }
+   th:nth-child(7) { width: 100px; }
    th:nth-child(8) { width: 60px; }
-  tr.top10 { background: #e8f5e9; }
+   th:nth-child(9) { width: 120px; }
+   tr.top10 { background: #e8f5e9; }
+   tr.unhealthy { background: #fff3e0; }
   tr:hover { background: #fff3e0; }
   .url a { color: #1976d2; text-decoration: none; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .engines { letter-spacing: 2px; white-space: nowrap; }
   .ok { color: #2e7d32; font-weight: bold; }
   .fail { color: #ccc; }
-  .bucket { color: #999; font-size: 11px; }
-  .legend { margin: 10px 0; font-size: 13px; color: #666; }
+   .bucket { color: #999; font-size: 11px; }
+   .status { color: #e65100; font-size: 11px; }
+   h2 { margin: 20px 0 10px; color: #333; }
 </style>
 </head>
 <body>
 <h1>SearXNG Instance Ranking</h1>
 <div class="meta">
   Generated: ${ts} UTC &nbsp;|&nbsp;
-  ${ranked.length} healthy instances (from ${Object.keys(instances).length} total) &nbsp;|&nbsp;
-  Top 10 highlighted
+  ${healthyList.length} healthy + ${unhealthyList.length} unhealthy (${allInstances.length} total normal instances)
 </div>
 <div class="legend">
-  Columns ordered by sort priority ①→⑤. <span class="bucket">[N]</span> = bucket for comparison.
-  &nbsp;|&nbsp; <span class="ok">G</span>=Google <span class="ok">B</span>=Brave <span class="ok">B</span>=Bing <span class="ok">D</span>=DuckDuckGo
+  <span class="ok">G</span>=Google <span class="ok">B</span>=Brave <span class="ok">B</span>=Bing <span class="ok">D</span>=DuckDuckGo &nbsp;|&nbsp;
+  <span class="bucket">[N]</span> = bucket for comparison
 </div>
+<h2>Healthy (${healthyList.length})</h2>
 <table>
 <thead>
 <tr>
-   <th>#</th><th>Instance</th><th>Speed [log₀.₅]</th><th>Core</th><th>Uptime Monthly</th><th>Total</th><th>Uptime Yearly</th><th>Grade</th>
+  <th>#</th><th>Instance</th><th>Speed [log₀.₅]</th><th>Core</th><th>Uptime Monthly</th><th>Total</th><th>Uptime Yearly</th><th>Grade</th><th>Status</th>
 </tr>
 </thead>
 <tbody>
-${rows}
+${renderRows(healthyList, 0)}
+</tbody>
+</table>
+
+<h2>Unhealthy (${unhealthyList.length})</h2>
+<table>
+<thead>
+<tr>
+  <th>#</th><th>Instance</th><th>Speed [log₀.₅]</th><th>Core</th><th>Uptime Monthly</th><th>Total</th><th>Uptime Yearly</th><th>Grade</th><th>Status</th>
+</tr>
+</thead>
+<tbody>
+${renderRows(unhealthyList, healthyList.length)}
 </tbody>
 </table>
 </body>
 </html>`;
 
   fs.writeFileSync(outPath, html, 'utf-8');
-  console.error(`Wrote ${ranked.length} instances to ${outPath}`);
+  console.error(`Wrote ${allInstances.length} instances (${healthyList.length} healthy) to ${outPath}`);
 }
 
 main().catch(e => { console.error(e); process.exit(1); });
