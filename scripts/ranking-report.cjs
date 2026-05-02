@@ -97,12 +97,9 @@ async function main() {
     `<span class="${v[i] ? 'ok' : 'fail'}">${e[0].toUpperCase()}</span>`
   ).join('');
 
-  // Compute max visible lengths from actual data
-  const urlLen = Math.max(...ranked.map(r => r.url.replace('https://','').length));
-  const instanceW = Math.min(urlLen * 8 + 40, 500); // ~8px per char, cap at 500px
-  const numW = 130; // "0.447s [-1]" fits in 130px
-  const coreW = 56;  // "GBBD" with letter-spacing fits in 56px
-  const shortW = 80; // "100.0%" or "256" fits in 80px
+  // Max URL length for capping instance column width
+  const maxUrlChars = Math.max(...ranked.map(r => r.url.replace('https://','').length));
+  const urlMaxW = Math.min(maxUrlChars * 8 + 40, 520);
 
   const rows = ranked.map((r, i) => `
     <tr class="${i < 10 ? 'top10' : ''}">
@@ -133,10 +130,18 @@ async function main() {
   .meta { color: #666; margin-bottom: 20px; }
   table { border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
   th { background: #333; color: white; padding: 8px 10px; font-size: 13px; position: sticky; top: 0; white-space: nowrap; }
-  td { padding: 6px 10px; border-bottom: 1px solid #eee; font-size: 13px; }
+  td { padding: 6px 10px; border-bottom: 1px solid #eee; font-size: 13px; white-space: nowrap; }
+  th:first-child, td:first-child { width: 32px; }
+  th:nth-child(3), td:nth-child(3) { min-width: 124px; }
+  th:nth-child(4), td:nth-child(4) { min-width: 50px; }
+  th:nth-child(5), td:nth-child(5) { min-width: 124px; }
+  th:nth-child(6), td:nth-child(6) { min-width: 124px; }
+  th:nth-child(7), td:nth-child(7) { min-width: 56px; }
+  th:nth-child(8), td:nth-child(8) { min-width: 72px; }
+  th:nth-child(9), td:nth-child(9) { min-width: 44px; }
   tr.top10 { background: #e8f5e9; }
   tr:hover { background: #fff3e0; }
-  .url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .url { max-width: ${urlMaxW}px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .url a { color: #1976d2; text-decoration: none; }
   .engines { letter-spacing: 2px; white-space: nowrap; }
   .ok { color: #2e7d32; font-weight: bold; }
@@ -157,17 +162,6 @@ async function main() {
   &nbsp;|&nbsp; <span class="ok">G</span>=Google <span class="ok">B</span>=Brave <span class="ok">B</span>=Bing <span class="ok">D</span>=DuckDuckGo
 </div>
 <table>
-<colgroup>
-  <col style="width:40px">
-  <col style="width:${instanceW}px; max-width:500px">
-  <col style="width:${numW}px">
-  <col style="width:${coreW}px">
-  <col style="width:${numW}px">
-  <col style="width:${numW}px">
-  <col style="width:${shortW}px">
-  <col style="width:${shortW}px">
-  <col style="width:${shortW}px">
-</colgroup>
 <thead>
 <tr>
   <th>#</th><th>Instance</th><th>Speed [log₅]</th><th>Core</th><th>Load [×10]</th><th>Uptime [%]</th><th>Total</th><th>Yr Uptime</th><th>Grade</th>
