@@ -11,7 +11,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import axios from "axios";
 import dotenv from "dotenv";
-import { parse } from "yaml";
+// yaml import removed — using searx.space JSON API now
 
 dotenv.config();
 
@@ -21,51 +21,50 @@ const SEARXNG_USERNAME = process.env.SEARXNG_USERNAME;
 const SEARXNG_PASSWORD = process.env.SEARXNG_PASSWORD;
 const USE_RANDOM_INSTANCE = process.env.USE_RANDOM_INSTANCE !== "false"; // Default to true if not set
 
-// URL for the list of SearXNG instances
-const INSTANCES_LIST_URL = "https://raw.githubusercontent.com/searxng/searx-instances/refs/heads/master/searxinstances/instances.yml";
+// URL for searx.space instances JSON (with health/uptime/response-time data)
+const INSTANCES_LIST_URL = "https://searx.space/data/instances.json";
 
-// Function to fetch and select a random SearXNG instance
+// Function to fetch and select a random SearXNG instance from searx.space
 async function getRandomSearXNGInstance(): Promise<string> {
   try {
-    console.error("[SearXNG] Fetching list of SearXNG instances...");
-    const response = await axios.get(INSTANCES_LIST_URL);
-    const instancesData = parse(response.data);
-    
-    // Debug the structure
-    console.error("[SearXNG] Instances data structure:", Object.keys(instancesData));
-    
-    // Filter for standard internet instances (not onion or hidden)
-    const standardInstances: string[] = [];
-    
-    // The instances.yml file has a structure where each key is a URL
-    for (const [url, data] of Object.entries(instancesData)) {
-      const instanceData = data as any;
-      
-      // Check if it's a standard instance (not hidden or onion)
+    console.error("[SearXNG] Fetching instances from searx.space...");
+    const response = await axios.get(INSTANCES_LIST_URL, { timeout: 15000 });
+    const data = response.data;
+    const instances = data.instances || {};
+
+    const healthyInstances: string[] = [];
+
+    for (const [url, instance] of Object.entries(instances)) {
+      const inst = instance as any;
+
+      // Filter: only healthy, fast, normal-network instances
       if (
-        instanceData && 
-        (!instanceData.comments || 
-         (!instanceData.comments.includes("hidden") && 
-          !instanceData.comments.includes("onion"))) &&
-        (!instanceData.network_type || instanceData.network_type === "normal")
+        inst.network_type === "normal" &&
+        inst.http?.status_code === 200 &&
+        inst.http?.error == null &&
+        inst.uptime?.uptimeDay === 100 &&
+        inst.timing?.initial?.all?.value < 1 &&
+        inst.timing?.search?.all?.median < 1 &&
+        inst.timing?.initial?.success_percentage === 100 &&
+        inst.timing?.search?.success_percentage === 100
       ) {
-        standardInstances.push(url);
+        healthyInstances.push(url);
       }
     }
-    
-    console.error(`[SearXNG] Found ${standardInstances.length} standard instances`);
-    
-    if (standardInstances.length === 0) {
-      throw new Error("No standard SearXNG instances found");
+
+    console.error(`[SearXNG] Found ${healthyInstances.length} healthy instances (from ${Object.keys(instances).length} total)`);
+
+    if (healthyInstances.length === 0) {
+      throw new Error("No healthy SearXNG instances found on searx.space");
     }
-    
+
     // Select a random instance
-    const randomInstance = standardInstances[Math.floor(Math.random() * standardInstances.length)];
+    const randomInstance = healthyInstances[Math.floor(Math.random() * healthyInstances.length)];
     console.error(`[SearXNG] Selected random instance: ${randomInstance}`);
     return randomInstance;
   } catch (error) {
     console.error("[SearXNG] Error fetching instances:", error);
-    throw new Error("Failed to fetch SearXNG instances list");
+    throw new Error("Failed to fetch SearXNG instances from searx.space");
   }
 }
 
