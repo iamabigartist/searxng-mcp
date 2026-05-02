@@ -99,15 +99,15 @@ async function main() {
 
   const rows = ranked.map((r, i) => `
     <tr class="${i < 10 ? 'top10' : ''}">
-      <td class="rank">${i + 1}</td>
+      <td class="r">${i + 1}</td>
       <td class="url"><a href="${r.url}" target="_blank">${r.url.replace('https://','')}</a></td>
       <td class="num">${r.speed.toFixed(3)}s <span class="bucket">[${r.speedBucket}]</span></td>
-      <td class="engines">${engineLabel(r.engineVec)}</td>
+      <td class="engines c">${engineLabel(r.engineVec)}</td>
       <td class="num">${r.load != null ? r.load.toFixed(3) + 's <span class=\"bucket\">[' + r.loadBucket + ']</span>' : '-'}</td>
       <td class="num">${r.uptimeMonth.toFixed(1)}% <span class="bucket">[${r.uptimeBucket}]</span></td>
       <td class="num">${r.totalEngines}</td>
       <td class="num">${r.uptimeYear.toFixed(1)}%</td>
-      <td>${r.htmlGrade}</td>
+      <td class="c">${r.htmlGrade}</td>
     </tr>`).join('\n');
 
   const ts = new Date().toISOString().replace('T', ' ').slice(0, 19);
@@ -125,15 +125,17 @@ async function main() {
   h1 { color: #333; }
   .meta { color: #666; margin-bottom: 20px; }
   table { border-collapse: collapse; width: 100%; table-layout: fixed; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-  th { background: #333; color: white; padding: 8px 10px; text-align: left; font-size: 13px; position: sticky; top: 0; overflow: hidden; text-overflow: ellipsis; }
-  td { padding: 6px 10px; border-bottom: 1px solid #eee; font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
+  th { background: #333; color: white; padding: 8px 6px; font-size: 13px; position: sticky; top: 0; overflow: hidden; text-overflow: ellipsis; }
+  td { padding: 6px 6px; border-bottom: 1px solid #eee; font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
+  .r { text-align: right; }
+  .c { text-align: center; }
+  .l { text-align: left; }
   tr.top10 { background: #e8f5e9; }
   tr:hover { background: #fff3e0; }
-  .rank { font-weight: bold; text-align: right; width: 30px; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .url { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .url a { color: #1976d2; text-decoration: none; }
-  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .engines { letter-spacing: 2px; }
+  .engines { letter-spacing: 2px; white-space: nowrap; }
   .ok { color: #2e7d32; font-weight: bold; }
   .fail { color: #ccc; }
   .bucket { color: #999; font-size: 11px; }
@@ -153,9 +155,20 @@ async function main() {
   &nbsp;|&nbsp; <span class="ok">G</span>=Google <span class="ok">B</span>=Brave <span class="ok">B</span>=Bing <span class="ok">D</span>=DuckDuckGo
 </div>
 <table>
+<colgroup>
+  <col style="width:36px">
+  <col style="width:auto">
+  <col style="width:130px">
+  <col style="width:52px">
+  <col style="width:120px">
+  <col style="width:120px">
+  <col style="width:72px">
+  <col style="width:72px">
+  <col style="width:44px">
+</colgroup>
 <thead>
 <tr>
-  <th>#</th><th>Instance</th><th>① Speed [log₅]</th><th>② Core</th><th>③ Load [×10]</th><th>④ Uptime [%]</th><th>⑤ Total</th><th>Yr Uptime</th><th>Grade</th>
+  <th class="r">#</th><th>Instance</th><th class="r">Speed [log₅]</th><th class="c">Core</th><th class="r">Load [×10]</th><th class="r">Uptime [%]</th><th class="r">Total</th><th class="r">Yr Uptime</th><th class="c">Grade</th>
 </tr>
 </thead>
 <tbody>
