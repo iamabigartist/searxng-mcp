@@ -130,8 +130,8 @@ async function main() {
   h1 { color: #333; }
   .meta { color: #666; margin-bottom: 20px; }
   table { table-layout: fixed; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-  th { background: #333; color: white; padding: 8px 10px; font-size: 13px; position: sticky; top: 0; }
-  td { padding: 6px 10px; border-bottom: 1px solid #eee; font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
+  th { background: #333; color: white; padding: 8px 10px; font-size: 13px; position: sticky; top: 0; text-align: left; }
+  td { padding: 6px 10px; border-bottom: 1px solid #eee; font-size: 13px; overflow: hidden; text-overflow: ellipsis; text-align: left; }
   th:first-child { width: 40px; }
   th:nth-child(2) { width: ${urlMaxW}px; }
   th:nth-child(3) { width: 140px; }
