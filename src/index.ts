@@ -27,7 +27,6 @@ const INSTANCES_LIST_URL = "https://searx.space/data/instances.json";
 // Engine priority (lexicographic order for comparison)
 // Google > Brave > Bing > DuckDuckGo
 const ENGINE_PRIORITY = ["google", "brave", "bing", "duckduckgo"] as const;
-const ENGINE_LABELS = ["Go", "Br", "Bi", "Dd"];
 
 /** Check if an engine is healthy (present and 0% error rate) */
 function engineOk(engines: Record<string, any>, name: string): boolean {
@@ -157,7 +156,7 @@ async function getBestSearXNGInstance(): Promise<string> {
       throw new Error("No healthy SearXNG instances found on searx.space");
     }
 
-    const engineLabel = (v: boolean[]) => ENGINE_LABELS.map((l, i) => v[i] ? l : '--').join('');
+    const engineLabel = (v: boolean[]) => ENGINE_PRIORITY.map((e, i) => v[i] ? e[0].toUpperCase() : '-').join('');
     for (const r of ranked.slice(0, 5)) {
       console.error(
         `  spd=${r.speedBucket} eng=[${engineLabel(r.engineVec)}] ` +
