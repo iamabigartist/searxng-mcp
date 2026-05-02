@@ -61,10 +61,10 @@ npm install && npm run build
 
 ## 调参须知
 
+- **⚠️ 公共实例是志愿者资源**：不设 `SEARXNG_URL` 时会自动使用公共 SearXNG 实例。这些实例由社区志愿者维护，请勿高频请求。**高频或商业用途请自托管** SearXNG 实例并设置 `SEARXNG_URL`。详见 [调研文档](docs/research.md)
 - **公共实例可能返回 429**：每个实例有各自限流策略，遇到 429 时重启 MCP 会话即可换一个实例
 - **响应速度波动**：不同实例地理位置和服务器配置不同，首次搜索可能略慢
 - **健康过滤可调整**：修改 `src/index.ts` 中 `getRandomSearXNGInstance()` 的过滤条件（如降低 uptime 阈值以增加候选实例）
-- **自托管推荐**：如果需要稳定搜索，建议自托管 SearXNG 实例并设置 `SEARXNG_URL`
 
 ## 工具
 
