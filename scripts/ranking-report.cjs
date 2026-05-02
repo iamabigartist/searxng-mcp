@@ -64,7 +64,6 @@ async function main() {
       httpError: inst.http?.error != null,
       initialSlow: (inst.timing?.initial?.all?.value ?? 999) >= 1,
       initFail: inst.timing?.initial?.success_percentage !== 100,
-      noEngine: !vec[0] && !vec[1],
     };
 
     const softWarnings = {
@@ -77,7 +76,6 @@ async function main() {
         if (k === 'httpError') return 'http-error';
         if (k === 'initialSlow') return 'slow-initial';
         if (k === 'initFail') return 'init-fail';
-        if (k === 'noEngine') return 'no-G-no-B';
         return k;
       });
     

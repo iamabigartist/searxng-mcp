@@ -118,9 +118,6 @@ async function getBestSearXNGInstance(): Promise<string> {
       const engines = inst.engines || {};
       const vec = engineVector(engines);
 
-      // Hard requirement: Google or Brave must be available
-      if (!vec[0] && !vec[1]) continue;
-
       const uptime = inst.uptime || {};
       const um = uptime.uptimeMonth ?? 0;
 
