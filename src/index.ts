@@ -24,44 +24,127 @@ const USE_RANDOM_INSTANCE = process.env.USE_RANDOM_INSTANCE !== "false"; // Defa
 // URL for searx.space instances JSON (with health/uptime/response-time data)
 const INSTANCES_LIST_URL = "https://searx.space/data/instances.json";
 
-// Function to fetch and select a random SearXNG instance from searx.space
-async function getRandomSearXNGInstance(): Promise<string> {
+// Core search engines that indicate a well-configured instance
+const CORE_ENGINES = ["google", "duckduckgo", "bing", "brave"];
+
+interface ScoredInstance {
+  url: string;
+  score: number;
+  speed: number;
+  uptime: number;
+  coreEngines: number;
+  totalEngines: number;
+  grade: string;
+}
+
+function scoreInstance(url: string, inst: any): ScoredInstance | null {
+  const timing = inst.timing || {};
+  const uptime = inst.uptime || {};
+  const engines = inst.engines || {};
+  const html = inst.html || {};
+
+  // Speed: normalize to 0-1 (faster = higher, cap at 2s)
+  const searchTime = timing.search?.all?.median ?? 2;
+  const speed = Math.max(0, 1 - searchTime / 2);
+
+  // Uptime: monthly as fraction
+  const uptimeMonth = (uptime.uptimeMonth ?? 100) / 100;
+
+  // Core engines: count Google/DuckDuckGo/Bing/Brave with 0% error rate
+  let coreOk = 0;
+  for (const eng of CORE_ENGINES) {
+    const ei = engines[eng];
+    if (ei && (typeof ei !== "object" || (ei.error_rate ?? 0) === 0)) {
+      coreOk++;
+    }
+  }
+  const engineScore = coreOk / CORE_ENGINES.length;
+
+  // Total engine count as bonus (more engines = more comprehensive)
+  const totalEngines = Object.keys(engines).length;
+  const breadthScore = Math.min(1, totalEngines / 250);
+
+  // HTML grade: V(vanilla)=1.0, C(custom)=0.9, F(fork)=0.7, else=0.5
+  const grade = html.grade || "?";
+  const gradeScore = grade === "V" ? 1.0 : grade === "C" ? 0.9 : grade === "F" ? 0.7 : 0.5;
+
+  // Weighted score
+  const score =
+    speed * 0.35 +          // response time matters most
+    uptimeMonth * 0.25 +    // reliability
+    engineScore * 0.25 +    // core engines working
+    breadthScore * 0.05 +   // engine diversity
+    gradeScore * 0.10;      // vanilla vs modified
+
+  return { url, score, speed, uptime: uptimeMonth, coreEngines: coreOk, totalEngines, grade };
+}
+
+// Function to fetch and rank SearXNG instances from searx.space
+async function getBestSearXNGInstance(): Promise<string> {
   try {
     console.error("[SearXNG] Fetching instances from searx.space...");
     const response = await axios.get(INSTANCES_LIST_URL, { timeout: 15000 });
     const data = response.data;
     const instances = data.instances || {};
 
-    const healthyInstances: string[] = [];
+    const scored: ScoredInstance[] = [];
 
     for (const [url, instance] of Object.entries(instances)) {
       const inst = instance as any;
 
-      // Filter: only healthy, fast, normal-network instances
+      // Filter: only healthy, fast, normal-network instances (same criteria)
       if (
-        inst.network_type === "normal" &&
-        inst.http?.status_code === 200 &&
-        inst.http?.error == null &&
-        inst.uptime?.uptimeDay === 100 &&
-        inst.timing?.initial?.all?.value < 1 &&
-        inst.timing?.search?.all?.median < 1 &&
-        inst.timing?.initial?.success_percentage === 100 &&
-        inst.timing?.search?.success_percentage === 100
+        inst.network_type !== "normal" ||
+        inst.http?.status_code !== 200 ||
+        inst.http?.error != null ||
+        inst.uptime?.uptimeDay !== 100 ||
+        (inst.timing?.initial?.all?.value ?? 999) >= 1 ||
+        (inst.timing?.search?.all?.median ?? 999) >= 1 ||
+        inst.timing?.initial?.success_percentage !== 100 ||
+        inst.timing?.search?.success_percentage !== 100
       ) {
-        healthyInstances.push(url);
+        continue;
       }
+
+      const result = scoreInstance(url, inst);
+      if (result) scored.push(result);
     }
 
-    console.error(`[SearXNG] Found ${healthyInstances.length} healthy instances (from ${Object.keys(instances).length} total)`);
+    // Sort by score descending
+    scored.sort((a, b) => b.score - a.score);
 
-    if (healthyInstances.length === 0) {
+    console.error(`[SearXNG] Found ${scored.length} healthy instances (from ${Object.keys(instances).length} total)`);
+
+    if (scored.length === 0) {
       throw new Error("No healthy SearXNG instances found on searx.space");
     }
 
-    // Select a random instance
-    const randomInstance = healthyInstances[Math.floor(Math.random() * healthyInstances.length)];
-    console.error(`[SearXNG] Selected random instance: ${randomInstance}`);
-    return randomInstance;
+    // Show top 5 for debugging
+    for (const s of scored.slice(0, 5)) {
+      console.error(
+        `  [${s.score.toFixed(3)}] ${s.url} ` +
+        `speed=${s.speed.toFixed(2)} uptime=${s.uptime.toFixed(2)} ` +
+        `core=${s.coreEngines}/${CORE_ENGINES.length} ` +
+        `eng=${s.totalEngines} grade=${s.grade}`
+      );
+    }
+
+    // Weighted random from top 10 to distribute load
+    const topN = scored.slice(0, Math.min(10, scored.length));
+    const totalWeight = topN.reduce((sum, s) => sum + s.score, 0);
+    let r = Math.random() * totalWeight;
+    for (const s of topN) {
+      r -= s.score;
+      if (r <= 0) {
+        console.error(`[SearXNG] Selected: ${s.url} (score ${s.score.toFixed(3)})`);
+        return s.url;
+      }
+    }
+
+    // Fallback: first in list
+    const best = scored[0];
+    console.error(`[SearXNG] Selected (fallback): ${best.url} (score ${best.score.toFixed(3)})`);
+    return best.url;
   } catch (error) {
     console.error("[SearXNG] Error fetching instances:", error);
     throw new Error("Failed to fetch SearXNG instances from searx.space");
@@ -371,9 +454,9 @@ class SearXNGClient {
         console.error(`[SearXNG] Using specified instance: ${this.instanceUrl}`);
       } else if (USE_RANDOM_INSTANCE) {
         // Only fetch random instance if no URL is specified and random instances are enabled
-        console.error("[SearXNG] No URL specified, will use a random instance");
+        console.error("[SearXNG] No URL specified, will auto-discover best instance");
         try {
-          this.instanceUrl = await getRandomSearXNGInstance();
+          this.instanceUrl = await getBestSearXNGInstance();
           console.error(`[SearXNG] Using random instance: ${this.instanceUrl}`);
         } catch (error) {
           console.error("[SearXNG] Error getting random instance:", error);
