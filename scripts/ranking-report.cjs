@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 /**
  * Generate an HTML ranking report of all SearXNG instances.
- * Usage: node scripts/ranking-report.js > ranking.html
+ * Usage: node scripts/ranking-report.cjs [output-file]
+ * Default output: ./ranking.html
  */
 
 const https = require('https');
+const fs = require('fs');
+const path = require('path');
 
 const ENGINE_PRIORITY = ["google", "brave", "bing", "duckduckgo"];
 
@@ -63,13 +66,13 @@ async function main() {
     if (um < 90 || uy < 90) continue;
 
     const speed = inst.timing?.search?.all?.median ?? 999;
-    const load = inst.timing?.search?.load?.median ?? 99;
+    const load = inst.timing?.search?.load?.median ?? null;
 
     ranked.push({
       url,
       speedBucket: log5Bucket(speed),
       engineVec: vec,
-      loadBucket: Math.round(load * 10),
+      loadBucket: load != null ? Math.round(load * 10) : null,
       uptimeBucket: Math.round(um),
       totalEngines: Object.keys(engines).length,
       speed,
@@ -77,8 +80,6 @@ async function main() {
       uptimeMonth: um,
       uptimeYear: uy,
       htmlGrade: inst.html?.grade || '?',
-      tlsGrade: inst.tls?.grade || '?',
-      ipv6: inst.network?.ipv6 ? '✓' : '',
     });
   }
 
@@ -86,7 +87,8 @@ async function main() {
     if (a.speedBucket !== b.speedBucket) return a.speedBucket - b.speedBucket;
     const ec = compareEngineVectors(a.engineVec, b.engineVec);
     if (ec !== 0) return ec;
-    if (a.loadBucket !== b.loadBucket) return a.loadBucket - b.loadBucket;
+    const la = a.loadBucket ?? 999, lb = b.loadBucket ?? 999;
+    if (la !== lb) return la - lb;
     if (b.uptimeBucket !== a.uptimeBucket) return b.uptimeBucket - a.uptimeBucket;
     return b.totalEngines - a.totalEngines;
   });
@@ -95,27 +97,26 @@ async function main() {
     `<span class="${v[i] ? 'ok' : 'fail'}">${e[0].toUpperCase()}</span>`
   ).join('');
 
+  const bucket = (label, b) => `<span class="bucket">(${label}:${b})</span>`;
+
   const rows = ranked.map((r, i) => `
     <tr class="${i < 10 ? 'top10' : ''}">
       <td class="rank">${i + 1}</td>
       <td class="url"><a href="${r.url}" target="_blank">${r.url.replace('https://','')}</a></td>
-      <td class="num">${r.speedBucket}</td>
+      <td class="num">${r.speed.toFixed(3)}s ${bucket('s', r.speedBucket)}</td>
       <td class="engines">${engineLabel(r.engineVec)}</td>
-      <td class="num">${r.loadBucket}</td>
-      <td class="num">${r.uptimeBucket}%</td>
+      <td class="num">${r.load != null ? r.load.toFixed(3) + 's ' + bucket('l', r.loadBucket) : '-'}</td>
+      <td class="num">${r.uptimeMonth.toFixed(1)}% ${bucket('u', r.uptimeBucket)}</td>
       <td class="num">${r.totalEngines}</td>
-      <td class="num">${r.speed.toFixed(3)}s</td>
-      <td class="num">${r.load !== 99 ? r.load.toFixed(3) + 's' : '-'}</td>
-      <td class="num">${r.uptimeMonth.toFixed(1)}%</td>
       <td class="num">${r.uptimeYear.toFixed(1)}%</td>
       <td>${r.htmlGrade}</td>
-      <td>${r.tlsGrade}</td>
-      <td>${r.ipv6}</td>
     </tr>`).join('\n');
 
   const ts = new Date().toISOString().replace('T', ' ').slice(0, 19);
 
-  console.log(`<!DOCTYPE html>
+  const outPath = process.argv[2] || path.join(__dirname, '..', 'ranking.html');
+
+  const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -131,34 +132,33 @@ async function main() {
   tr.top10 { background: #e8f5e9; }
   tr:hover { background: #fff3e0; }
   .rank { font-weight: bold; text-align: right; width: 30px; }
-  .url { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .url { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .url a { color: #1976d2; text-decoration: none; }
-  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .engines { letter-spacing: 2px; }
   .ok { color: #2e7d32; font-weight: bold; }
   .fail { color: #ccc; }
+  .bucket { color: #999; font-size: 11px; }
   .legend { margin: 10px 0; font-size: 13px; color: #666; }
-  .legend span { margin-right: 15px; }
+  .legend code { background: #eee; padding: 1px 5px; border-radius: 3px; }
 </style>
 </head>
 <body>
 <h1>SearXNG Instance Ranking</h1>
 <div class="meta">
-  Generated: ${ts} UTC | ${ranked.length} healthy instances (filtered from ${Object.keys(instances).length} total) |
+  Generated: ${ts} UTC &nbsp;|&nbsp;
+  ${ranked.length} healthy instances (from ${Object.keys(instances).length} total) &nbsp;|&nbsp;
   Top 10 highlighted
 </div>
 <div class="legend">
-  <span>Sort: speed(log5) → engines(G>B>B>D) → load(0.1s) → uptime(%) → total_engines</span>
-  <span class="ok">G</span>=Google
-  <span class="ok">B</span>=Brave
-  <span class="ok">B</span>=Bing
-  <span class="ok">D</span>=DuckDuckGo
+  Sort: <code>speed(log₅)</code> → <code>engines(G>B>B>D)</code> → <code>load(0.1s)</code> → <code>uptime(%)</code> → <code>total engines</code> &nbsp;|&nbsp;
+  <span class="ok">G</span>=Google <span class="ok">B</span>=Brave <span class="ok">B</span>=Bing <span class="ok">D</span>=DuckDuckGo &nbsp;|&nbsp;
+  Buckets: <span class="bucket">(s:-1)</span>=speed <span class="bucket">(l:4)</span>=load <span class="bucket">(u:100)</span>=uptime
 </div>
 <table>
 <thead>
 <tr>
-  <th>#</th><th>Instance</th><th>Spd</th><th>Engines</th><th>Load</th><th>Upt</th><th>Tot</th>
-  <th>Raw spd</th><th>Raw load</th><th>Mth%</th><th>Yr%</th><th>HTML</th><th>TLS</th><th>v6</th>
+  <th>#</th><th>Instance</th><th>Speed</th><th>Engines</th><th>Load</th><th>Uptime</th><th>Total Eng</th><th>Uptime Yr</th><th>HTML</th>
 </tr>
 </thead>
 <tbody>
@@ -166,7 +166,10 @@ ${rows}
 </tbody>
 </table>
 </body>
-</html>`);
+</html>`;
+
+  fs.writeFileSync(outPath, html, 'utf-8');
+  console.error(`Wrote ${ranked.length} instances to ${outPath}`);
 }
 
 main().catch(e => { console.error(e); process.exit(1); });

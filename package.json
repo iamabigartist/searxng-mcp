@@ -16,6 +16,7 @@
     "prepare": "npm run build",
     "watch": "tsc --watch",
     "inspector": "npx @modelcontextprotocol/inspector build/index.js",
+    "ranking": "node scripts/ranking-report.cjs",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
