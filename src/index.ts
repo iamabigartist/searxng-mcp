@@ -124,8 +124,6 @@ async function getBestSearXNGInstance(): Promise<string> {
 
       const uptime = inst.uptime || {};
       const um = uptime.uptimeMonth ?? 0;
-      const uy = uptime.uptimeYear ?? 0;
-      if (um < 90 || uy < 90) continue;
 
       const speed = inst.timing?.search?.all?.median ?? 999;
 
