@@ -124,9 +124,9 @@ async function main() {
   body { font-family: system-ui, sans-serif; margin: 20px; background: #f5f5f5; }
   h1 { color: #333; }
   .meta { color: #666; margin-bottom: 20px; }
-  table { border-collapse: collapse; width: 100%; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-  th { background: #333; color: white; padding: 8px 10px; text-align: left; font-size: 13px; position: sticky; top: 0; }
-  td { padding: 6px 10px; border-bottom: 1px solid #eee; font-size: 13px; }
+  table { border-collapse: collapse; width: 100%; table-layout: fixed; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  th { background: #333; color: white; padding: 8px 10px; text-align: left; font-size: 13px; position: sticky; top: 0; overflow: hidden; text-overflow: ellipsis; }
+  td { padding: 6px 10px; border-bottom: 1px solid #eee; font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
   tr.top10 { background: #e8f5e9; }
   tr:hover { background: #fff3e0; }
   .rank { font-weight: bold; text-align: right; width: 30px; }
@@ -149,14 +149,14 @@ async function main() {
   Top 10 highlighted
 </div>
 <div class="legend">
-  Sort priority: <code>① speed(log₅)</code> → <code>② engines(G&gt;B&gt;B&gt;D)</code> → <code>③ load(×10)</code> → <code>④ uptime(%)</code> → <code>⑤ total engines</code> &nbsp;|&nbsp;
+  Sort priority: <code>① speed(log₅)</code> → <code>② core engines(G&gt;B&gt;B&gt;D)</code> → <code>③ load(×10)</code> → <code>④ uptime(%)</code> → <code>⑤ total engines</code> &nbsp;|&nbsp;
   <span class="ok">G</span>=Google <span class="ok">B</span>=Brave <span class="ok">B</span>=Bing <span class="ok">D</span>=DuckDuckGo &nbsp;|&nbsp;
-  <span class="bucket">[N]</span> = bucket used for comparison
+  <span class="bucket">[N]</span> = bucket for comparison
 </div>
 <table>
 <thead>
 <tr>
-  <th>#</th><th>Instance</th><th>Response [log₅]</th><th>Engines</th><th>Load [×10]</th><th>Uptime Mo [%]</th><th>Engines #</th><th>Uptime Yr</th><th>HTML</th>
+  <th>#</th><th>Instance</th><th>Speed [log₅]</th><th>Core</th><th>Load [×10]</th><th>Uptime Mo [%]</th><th>Total Eng</th><th>Uptime Yr</th><th>Grade</th>
 </tr>
 </thead>
 <tbody>
