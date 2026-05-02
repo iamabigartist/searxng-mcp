@@ -10,6 +10,7 @@ const fs = require('fs');
 const path = require('path');
 
 const ENGINE_PRIORITY = ["google", "brave", "bing", "duckduckgo"];
+const ENGINE_LABELS = ["Go", "Br", "Bi", "Dd"];
 
 function engineOk(engines, name) {
   const ei = engines[name];
@@ -119,8 +120,8 @@ async function main() {
   healthyList.sort(sortFn);
   unhealthyList.sort(sortFn);
 
-  const engineLabel = (v) => ENGINE_PRIORITY.map((e, i) =>
-    `<span class="${v[i] ? 'ok' : 'fail'}">${e[0].toUpperCase()}</span>`
+  const engineLabel = (v) => ENGINE_LABELS.map((l, i) =>
+    `<span class="${v[i] ? 'ok' : 'fail'}">${v[i] ? l : '--'}</span>`
   ).join('');
 
   // Max URL length for capping instance column width
@@ -189,7 +190,7 @@ async function main() {
   ${healthyList.length} healthy + ${unhealthyList.length} unhealthy (${allInstances.length} total normal instances)
 </div>
 <div class="legend">
-  <span class="ok">G</span>=Google <span class="ok">B</span>=Brave <span class="ok">B</span>=Bing <span class="ok">D</span>=DuckDuckGo &nbsp;|&nbsp;
+  <span class="ok">Go</span>=Google <span class="ok">Br</span>=Brave <span class="ok">Bi</span>=Bing <span class="ok">Dd</span>=DuckDuckGo &nbsp;|&nbsp;
   <span class="bucket">[N]</span> = bucket for comparison
 </div>
 <h2>Healthy (${healthyList.length})</h2>
