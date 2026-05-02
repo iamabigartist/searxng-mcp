@@ -129,21 +129,21 @@ async function main() {
   body { font-family: system-ui, sans-serif; margin: 20px; background: #f5f5f5; }
   h1 { color: #333; }
   .meta { color: #666; margin-bottom: 20px; }
-  table { table-layout: fixed; width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  table { table-layout: fixed; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
   th { background: #333; color: white; padding: 8px 10px; font-size: 13px; position: sticky; top: 0; }
-  td { padding: 6px 10px; border-bottom: 1px solid #eee; font-size: 13px; }
-  th:first-child { width: 36px; }
-  th:nth-child(3) { width: 128px; }
-  th:nth-child(4) { width: 56px; }
-  th:nth-child(5) { width: 128px; }
-  th:nth-child(6) { width: 128px; }
+  td { padding: 6px 10px; border-bottom: 1px solid #eee; font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
+  th:first-child { width: 40px; }
+  th:nth-child(2) { width: ${urlMaxW}px; }
+  th:nth-child(3) { width: 140px; }
+  th:nth-child(4) { width: 60px; }
+  th:nth-child(5) { width: 140px; }
+  th:nth-child(6) { width: 140px; }
   th:nth-child(7) { width: 60px; }
-  th:nth-child(8) { width: 76px; }
+  th:nth-child(8) { width: 80px; }
   th:nth-child(9) { width: 52px; }
   tr.top10 { background: #e8f5e9; }
   tr:hover { background: #fff3e0; }
-  .url { max-width: ${urlMaxW}px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
-  .url a { color: #1976d2; text-decoration: none; }
+  .url a { color: #1976d2; text-decoration: none; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .engines { letter-spacing: 2px; white-space: nowrap; }
   .ok { color: #2e7d32; font-weight: bold; }
   .fail { color: #ccc; }
