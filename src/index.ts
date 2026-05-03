@@ -9,9 +9,22 @@ import {
   McpError,
   Tool
 } from "@modelcontextprotocol/sdk/types.js";
-import axios from "axios";
+import axios, { AxiosInstance } from "axios";
 import dotenv from "dotenv";
-// yaml import removed — using searx.space JSON API now
+import {
+  classifySearchError,
+  computeSkipUntil,
+  createRuntimeState,
+  InstanceRuntimeState,
+  isValidSearXNGResponse,
+  loadRuntimeState,
+  pruneRuntimeState,
+  recordFailure,
+  recordSuccess,
+  RuntimeStateStore,
+  saveRuntimeState,
+} from "./instance-state.js";
+import { engineLabel, INSTANCES_LIST_URL, RankedInstance, rankInstances } from "./ranking.js";
 
 dotenv.config();
 
@@ -21,123 +34,17 @@ const SEARXNG_USERNAME = process.env.SEARXNG_USERNAME;
 const SEARXNG_PASSWORD = process.env.SEARXNG_PASSWORD;
 const USE_RANDOM_INSTANCE = process.env.USE_RANDOM_INSTANCE !== "false"; // Default to true if not set
 
-// URL for searx.space instances JSON (with health/uptime/response-time data)
-const INSTANCES_LIST_URL = "https://searx.space/data/instances.json";
-
-// Engine priority (lexicographic order for comparison)
-// Google > Brave > Bing > DuckDuckGo
-const ENGINE_PRIORITY = ["google", "brave", "bing", "duckduckgo"] as const;
-
-/** Check if an engine is healthy (present and 0% error rate) */
-function engineOk(engines: Record<string, any>, name: string): boolean {
-  const ei = engines[name];
-  if (!ei) return false;
-  return typeof ei !== "object" || (ei.error_rate ?? 0) === 0;
-}
-
-function engineVector(engines: Record<string, any>): boolean[] {
-  return ENGINE_PRIORITY.map((e) => engineOk(engines, e));
-}
-
-/** Compare two engine vectors lexicographically. Returns <0 if a ranks higher. */
-function compareEngineVectors(a: boolean[], b: boolean[]): number {
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return a[i] ? -1 : 1;
-  }
-  return 0;
-}
-
-/** log0.5 with rounding */
-function logHalfBucket(v: number): number {
-  return Math.round(Math.log(v) / Math.log(0.5));
-}
-
-interface RankedInstance {
-  url: string;
-  speedBucket: number;
-  engineVec: boolean[];
-  uptimeBucket: number;
-  totalEngines: number;
-  speed: number;
-  uptimeMonth: number;
-}
-
-// Runtime failure tracking
-const failureTracker = new Map<string, { count: number; firstFail: number; reason: string }>();
-const COOLDOWN_ERROR = 5 * 60 * 1000;  // 5 min for general errors
-const COOLDOWN_RATELIMIT = 60 * 60 * 1000;  // 1 hour for rate limits
-
-function isInCooldown(url: string): boolean {
-  const entry = failureTracker.get(url);
-  if (!entry) return false;
-  const cooldown = entry.reason === '429' ? COOLDOWN_RATELIMIT : COOLDOWN_ERROR;
-  const elapsed = Date.now() - entry.firstFail;
-  if (elapsed > cooldown) {
-    failureTracker.delete(url);
-    return false;
-  }
-  return entry.count >= 3;
-}
-
-function recordFailure(url: string, statusCode: number): void {
-  const entry = failureTracker.get(url);
-  if (entry) {
-    entry.count++;
-    entry.reason = String(statusCode);
-  } else {
-    failureTracker.set(url, { count: 1, firstFail: Date.now(), reason: String(statusCode) });
-  }
-  console.error(`[SearXNG] Recorded failure #${entry?.count ?? 1} for ${url} (${statusCode})`);
-}
+const MAX_FALLBACK_ATTEMPTS = 5;
+const MAX_FALLBACK_ELAPSED_MS = 30_000;
 
 // Function to fetch and rank SearXNG instances from searx.space
-async function getBestSearXNGInstance(): Promise<string> {
+async function getRankedSearXNGInstances(): Promise<RankedInstance[]> {
   try {
     console.error("[SearXNG] Fetching instances from searx.space...");
     const response = await axios.get(INSTANCES_LIST_URL, { timeout: 15000 });
-    const data = response.data;
-    const instances = data.instances || {};
-
-    const ranked: RankedInstance[] = [];
-
-    for (const [url, instance] of Object.entries(instances)) {
-      const inst = instance as any;
-
-      // ── Health filter (必要条件) ──
-
-      if (inst.network_type !== "normal") continue;
-
-      const engines = inst.engines || {};
-      const vec = engineVector(engines);
-
-      const uptime = inst.uptime || {};
-      const um = uptime.uptimeMonth ?? 0;
-
-      const speed = inst.timing?.search?.all?.median ?? 999;
-
-      ranked.push({
-        url,
-        speedBucket: logHalfBucket(speed),
-        engineVec: vec,
-        uptimeBucket: Math.round(um),
-        totalEngines: Object.keys(engines).length,
-        speed,
-        uptimeMonth: um,
-      });
-    }
-
-    // ── Ranking (择优条件) ──
-    ranked.sort((a, b) => {
-      // 1. Speed bucket (log0.5, descending — faster first)
-      if (b.speedBucket !== a.speedBucket) return b.speedBucket - a.speedBucket;
-      // 2. Engine vector (lexicographic: G > B(rave) > B(ing) > D)
-      const ec = compareEngineVectors(a.engineVec, b.engineVec);
-      if (ec !== 0) return ec;
-      // 3. Uptime bucket (descending — higher uptime first)
-      if (b.uptimeBucket !== a.uptimeBucket) return b.uptimeBucket - a.uptimeBucket;
-      // 4. Total engines (descending)
-      return b.totalEngines - a.totalEngines;
-    });
+    const data = response.data as { instances?: Record<string, unknown> };
+    const instances = data.instances ?? {};
+    const ranked = rankInstances(instances);
 
     console.error(`[SearXNG] Found ${ranked.length} healthy instances (from ${Object.keys(instances).length} total)`);
 
@@ -145,7 +52,6 @@ async function getBestSearXNGInstance(): Promise<string> {
       throw new Error("No healthy SearXNG instances found on searx.space");
     }
 
-    const engineLabel = (v: boolean[]) => ENGINE_PRIORITY.map((e, i) => v[i] ? e[0].toUpperCase() : '-').join('');
     for (const r of ranked.slice(0, 5)) {
       console.error(
         `  spd=${r.speedBucket} eng=[${engineLabel(r.engineVec)}] ` +
@@ -154,13 +60,7 @@ async function getBestSearXNGInstance(): Promise<string> {
       );
     }
 
-    // Pick from top 10, skip cooldown instances
-    const topN = ranked.slice(0, Math.min(10, ranked.length));
-    const candidates = topN.filter(r => !isInCooldown(r.url));
-    const pool = candidates.length > 0 ? candidates : topN;
-    const pick = pool[Math.floor(Math.random() * pool.length)];
-    console.error(`[SearXNG] Selected: ${pick.url}`);
-    return pick.url;
+    return ranked;
   } catch (error) {
     console.error("[SearXNG] Error fetching instances:", error);
     throw new Error("Failed to fetch SearXNG instances from searx.space");
@@ -184,23 +84,11 @@ interface SearchParams {
   pageno?: number;
 }
 
-// Interface for SearXNG search result
-interface SearXNGResult {
-  title: string;
-  url: string;
-  content: string;
-  engine: string;
-  score?: number;
-  category?: string;
-  pretty_url?: string;
-  publishedDate?: string;
-}
-
 // Interface for SearXNG search response
 interface SearXNGResponse {
   query: string;
   number_of_results: number;
-  results: SearXNGResult[];
+  results: unknown[];
   answers?: string[];
   corrections?: string[];
   infoboxes?: any[];
@@ -210,8 +98,10 @@ interface SearXNGResponse {
 
 class SearXNGClient {
   private server: Server;
-  private axiosInstance: any;
+  private axiosInstance?: AxiosInstance;
   private instanceUrl: string;
+  private rankedInstances: RankedInstance[] = [];
+  private runtimeState: RuntimeStateStore = {};
 
   constructor(instanceUrl?: string) {
     this.instanceUrl = instanceUrl || "";
@@ -348,12 +238,7 @@ class SearXNGClient {
 
         console.error(`[SearXNG] Searching for: ${args.query}`);
         
-        // Make request to SearXNG
-        const response = await this.axiosInstance.get('/search', {
-          params: searchParams
-        });
-
-        const searchResults: SearXNGResponse = response.data;
+        const searchResults = await this.search(searchParams);
         
         // Limit results if max_results is specified
         const maxResults = typeof args.max_results === 'number' ? args.max_results : 10;
@@ -373,16 +258,8 @@ class SearXNGClient {
             text: JSON.stringify(finalResponse, null, 2)
           }]
         };
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error("[SearXNG Error]", error);
-        
-        // Record failure for cooldown tracking
-        if (axios.isAxiosError(error)) {
-          const status = error.response?.status ?? 0;
-          recordFailure(this.instanceUrl, status);
-        } else {
-          recordFailure(this.instanceUrl, 0);
-        }
         
         if (axios.isAxiosError(error)) {
           // Handle authentication errors
@@ -408,7 +285,7 @@ class SearXNGClient {
         return {
           content: [{
             type: "text",
-            text: `Error: ${error.message}`
+            text: `Error: ${error instanceof Error ? error.message : String(error)}`
           }],
           isError: true,
         };
@@ -416,60 +293,100 @@ class SearXNGClient {
     });
   }
 
-  private formatResults(query: string, results: SearXNGResult[], fullResponse: SearXNGResponse): string {
-    const output: string[] = [];
-    
-    output.push(`# Search Results for: ${query}`);
-    output.push(`Found ${fullResponse.number_of_results} results\n`);
-
-    // Add answers if available
-    if (fullResponse.answers && fullResponse.answers.length > 0) {
-      output.push(`## Answers`);
-      fullResponse.answers.forEach(answer => {
-        output.push(`- ${answer}`);
-      });
-      output.push('');
+  private async search(params: SearchParams): Promise<SearXNGResponse> {
+    if (this.instanceUrl) {
+      if (!this.axiosInstance) throw new Error("SearXNG client is not initialized");
+      const startedAt = Date.now();
+      const response = await this.axiosInstance.get('/search', { params });
+      if (!isValidSearXNGResponse(response.data)) {
+        throw invalidResponseError();
+      }
+      console.error(`[SearXNG] Search succeeded in ${Date.now() - startedAt}ms via ${this.instanceUrl}`);
+      return response.data as SearXNGResponse;
     }
 
-    // Add suggestions if available
-    if (fullResponse.suggestions && fullResponse.suggestions.length > 0) {
-      output.push(`## Suggestions`);
-      fullResponse.suggestions.forEach(suggestion => {
-        output.push(`- ${suggestion}`);
-      });
-      output.push('');
+    return this.searchWithFallback(params);
+  }
+
+  private async searchWithFallback(params: SearchParams): Promise<SearXNGResponse> {
+    if (this.rankedInstances.length === 0) {
+      this.rankedInstances = await getRankedSearXNGInstances();
+      this.runtimeState = pruneRuntimeState(this.runtimeState, new Set(this.rankedInstances.map((i) => i.url)));
+      await saveRuntimeState(this.runtimeState);
     }
 
-    // Add corrections if available
-    if (fullResponse.corrections && fullResponse.corrections.length > 0) {
-      output.push(`## Did you mean?`);
-      fullResponse.corrections.forEach(correction => {
-        output.push(`- ${correction}`);
-      });
-      output.push('');
+    const startedAt = Date.now();
+    const errors: string[] = [];
+    let attempts = 0;
+
+    for (const instance of this.rankedInstances) {
+      if (attempts >= MAX_FALLBACK_ATTEMPTS) break;
+      if (Date.now() - startedAt >= MAX_FALLBACK_ELAPSED_MS) break;
+
+      const currentState = this.getRuntimeState(instance.url);
+      const skipUntil = computeSkipUntil(currentState);
+      if (skipUntil !== undefined) {
+        console.error(`[SearXNG] Skipping ${instance.url} until ${skipUntil === Number.POSITIVE_INFINITY ? "forever" : new Date(skipUntil).toISOString()}`);
+        continue;
+      }
+
+      attempts++;
+      const requestStartedAt = Date.now();
+      try {
+        console.error(`[SearXNG] Trying ranked instance #${attempts}: ${instance.url}`);
+        const response = await axios.get(`${instance.url.replace(/\/$/, "")}/search`, {
+          params,
+          timeout: 15_000,
+          maxRedirects: 0,
+          validateStatus: (status) => status >= 200 && status < 300,
+          headers: {
+            "Accept": "application/json, text/html;q=0.9, */*;q=0.8",
+            "Accept-Language": params.language ?? "en",
+            "User-Agent": "Mozilla/5.0 (compatible; searxng-mcp/0.2.0; +https://github.com/iamabigartist/searxng-mcp)",
+          },
+        });
+
+        if (!isValidSearXNGResponse(response.data)) {
+          throw invalidResponseError();
+        }
+
+        this.runtimeState[instance.url] = recordSuccess(currentState, {
+          latencyMs: Date.now() - requestStartedAt,
+          now: Date.now(),
+        });
+        await saveRuntimeState(this.runtimeState);
+        console.error(`[SearXNG] Search succeeded via ${instance.url}`);
+        return response.data as SearXNGResponse;
+      } catch (error) {
+        const errorClass = classifySearchError(error);
+        this.runtimeState[instance.url] = recordFailure(currentState, {
+          errorClass,
+          statusCode: this.statusCode(error),
+          now: Date.now(),
+        });
+        await saveRuntimeState(this.runtimeState);
+        errors.push(`${instance.url}: ${errorClass}`);
+        console.error(`[SearXNG] Instance failed (${errorClass}): ${instance.url}`);
+      }
     }
 
-    // Format detailed search results
-    output.push('## Results');
-    results.forEach((result, index) => {
-      output.push(`\n### ${index + 1}. ${result.title}`);
-      output.push(`URL: ${result.url}`);
-      if (result.engine) output.push(`Engine: ${result.engine}`);
-      if (result.category) output.push(`Category: ${result.category}`);
-      if (result.publishedDate) output.push(`Published: ${result.publishedDate}`);
-      output.push(`\n${result.content}`);
-    });
+    throw new Error(`All attempted SearXNG instances failed (${attempts} attempted): ${errors.join("; ")}`);
+  }
 
-    // Add unresponsive engines if any
-    if (fullResponse.unresponsive_engines && fullResponse.unresponsive_engines.length > 0) {
-      output.push('\n## Unresponsive Engines');
-      output.push(fullResponse.unresponsive_engines.join(', '));
-    }
+  private getRuntimeState(url: string): InstanceRuntimeState {
+    const state = this.runtimeState[url] ?? createRuntimeState(url);
+    this.runtimeState[url] = state;
+    return state;
+  }
 
-    return output.join('\n');
+  private statusCode(error: unknown): number | undefined {
+    if (axios.isAxiosError(error)) return error.response?.status;
+    return undefined;
   }
 
   async run(): Promise<void> {
+    this.runtimeState = await loadRuntimeState();
+
     // Determine which SearXNG instance to use
     if (!this.instanceUrl) {
       if (SEARXNG_URL) {
@@ -477,14 +394,14 @@ class SearXNGClient {
         this.instanceUrl = SEARXNG_URL;
         console.error(`[SearXNG] Using specified instance: ${this.instanceUrl}`);
       } else if (USE_RANDOM_INSTANCE) {
-        // Only fetch random instance if no URL is specified and random instances are enabled
-        console.error("[SearXNG] No URL specified, will auto-discover best instance");
+        console.error("[SearXNG] No URL specified, will use ranked public-instance fallback");
         try {
-          this.instanceUrl = await getBestSearXNGInstance();
-          console.error(`[SearXNG] Using random instance: ${this.instanceUrl}`);
+          this.rankedInstances = await getRankedSearXNGInstances();
+          this.runtimeState = pruneRuntimeState(this.runtimeState, new Set(this.rankedInstances.map((i) => i.url)));
+          await saveRuntimeState(this.runtimeState);
         } catch (error) {
-          console.error("[SearXNG] Error getting random instance:", error);
-          throw new Error("Failed to get a random SearXNG instance. Please provide SEARXNG_URL or fix the instance fetching issue.");
+          console.error("[SearXNG] Error getting ranked instances:", error);
+          throw new Error("Failed to get SearXNG instances. Please provide SEARXNG_URL or fix the instance fetching issue.");
         }
       } else {
         // If no URL is specified and random instances are disabled, throw an error
@@ -492,25 +409,27 @@ class SearXNGClient {
       }
     }
 
-    // Create axios instance with the determined URL and auth if provided
-    this.axiosInstance = axios.create({
-      baseURL: this.instanceUrl,
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-      ...(hasBasicAuth && {
-        auth: {
-          username: SEARXNG_USERNAME!,
-          password: SEARXNG_PASSWORD!,
+    if (this.instanceUrl) {
+      // Create axios instance with the determined URL and auth if provided
+      this.axiosInstance = axios.create({
+        baseURL: this.instanceUrl,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
         },
-      }),
-    });
+        ...(hasBasicAuth && {
+          auth: {
+            username: SEARXNG_USERNAME!,
+            password: SEARXNG_PASSWORD!,
+          },
+        }),
+      });
+    }
 
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     console.error("SearXNG MCP server running on stdio");
-    console.error(`Connected to SearXNG instance at: ${this.instanceUrl}`);
+    console.error(this.instanceUrl ? `Connected to SearXNG instance at: ${this.instanceUrl}` : `Connected with ${this.rankedInstances.length} ranked public instances`);
     console.error(`Basic auth: ${hasBasicAuth ? 'Enabled' : 'Disabled'}`);
     console.error(`Random instance selection: ${USE_RANDOM_INSTANCE ? 'Enabled' : 'Disabled'}`);
   }
@@ -518,3 +437,9 @@ class SearXNGClient {
 
 const server = new SearXNGClient();
 server.run().catch(console.error);
+
+function invalidResponseError(): Error & { code: string } {
+  const error = new Error("SearXNG returned an invalid response shape") as Error & { code: string };
+  error.code = "ESEARXNG_INVALID_RESPONSE";
+  return error;
+}
