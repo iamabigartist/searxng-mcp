@@ -21,7 +21,8 @@ export function scrapeResults(html: string): ScrapedResponse {
   const unresponsiveEngines: [string, string][] = [];
 
   // Extract individual search results from <article class="result">
-  $("#urls article.result").each((_i, el) => {
+  const container = $("#urls").length ? "#urls" : "#main_results";
+  $(`${container} article.result`).each((_i, el) => {
     const $el = $(el);
 
     // URL: from the first <a> with class "url_header"
@@ -30,10 +31,7 @@ export function scrapeResults(html: string): ScrapedResponse {
     // Title: from <h3> > <a>, strip internal tags like <span class="highlight">
     const $titleLink = $el.find("h3 a").first();
     const title = $titleLink.length
-      ? $titleLink
-          .html()
-          ?.replace(/<[^>]+>/g, "") // strip highlight spans
-          .trim() ?? ""
+      ? $titleLink.text().trim()
       : "";
 
     // Content snippet: from <p class="content">

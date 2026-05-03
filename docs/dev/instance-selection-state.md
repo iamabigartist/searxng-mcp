@@ -36,7 +36,6 @@ interface InstanceRuntimeState {
   totalRequests: number;
   totalFailures: number;
   permanentSkip?: boolean;
-  noJsonFormat?: boolean;
 }
 ```
 

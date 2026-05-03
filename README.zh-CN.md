@@ -62,6 +62,7 @@ npm install && npm run build
 ## 调参须知
 
 - **⚠️ 公共实例是志愿者资源**：不设 `SEARXNG_URL` 时会自动使用公共 SearXNG 实例。这些实例由社区志愿者维护，请勿高频请求。**高频或商业用途请自托管** SearXNG 实例并设置 `SEARXNG_URL`。详见 [调研文档](docs/research.md)
+- The tool scrapes SearXNG HTML search result pages rather than requiring JSON API support (which most public instances disable).
 - **公共实例可能返回 429**：各实例有独立限流策略。插件会记录 429、网络错误、服务器错误等状态，并在冷却时间内跳过对应实例。
 - **响应速度波动**：不同实例地理位置和服务器配置不同，首次搜索可能稍慢
 - **实例排行可视化**：运行 `npm run ranking` 生成 `ranking.html`，查看当前 searx.space 数据下的完整排行。
@@ -80,6 +81,7 @@ npm install && npm run build
 | `engines` | string[] | — | 指定使用的搜索引擎 |
 | `safesearch` | 0/1/2 | `1` | 0=关闭 1=中等 2=严格 |
 | `max_results` | 1-50 | `10` | 最大返回结果数 |
+| `pageno` | 1-∞ | `1` | 页码 |
 
 ## License
 

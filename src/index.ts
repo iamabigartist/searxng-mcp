@@ -91,7 +91,7 @@ interface SearXNGResponse {
   corrections?: string[];
   infoboxes?: unknown[];
   suggestions?: string[];
-  unresponsive_engines?: string[];
+  unresponsive_engines?: [string, string][];
 }
 
 class SearXNGClient {
@@ -100,6 +100,8 @@ class SearXNGClient {
   private instanceUrl: string;
   private rankedInstances: RankedInstance[] = [];
   private runtimeState: RuntimeStateStore = {};
+  private _dirty: boolean = false;
+  private _saveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(instanceUrl?: string) {
     this.instanceUrl = instanceUrl || "";
@@ -128,6 +130,7 @@ class SearXNGClient {
     };
 
     process.on('SIGINT', async () => {
+      await this.flushStateIfDirty();
       await this.server.close();
       process.exit(0);
     });
@@ -219,6 +222,12 @@ class SearXNGClient {
             "Query parameter is required and must be a string"
           );
         }
+        if (args.query.trim().length === 0) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            "Query parameter must be a non-empty string"
+          );
+        }
 
         // Prepare search parameters with defaults
         const searchParams: SearchParams = {
@@ -233,7 +242,7 @@ class SearXNGClient {
         if (Array.isArray(args.categories)) searchParams.categories = args.categories;
         if (Array.isArray(args.engines)) searchParams.engines = args.engines;
 
-        console.error(`[SearXNG] Searching for: ${args.query}`);
+        console.error('[SearXNG] Performing search');
         
         const searchResults = await this.search(searchParams);
         
@@ -256,7 +265,7 @@ class SearXNGClient {
           }]
         };
       } catch (error: unknown) {
-        console.error("[SearXNG Error]", error);
+        console.error("[SearXNG Error]", error instanceof Error ? error.message : String(error).slice(0,200));
         
         if (axios.isAxiosError(error)) {
           // Handle authentication errors
@@ -302,7 +311,7 @@ class SearXNGClient {
       const scraped = scrapeResults(html);
       scraped.query = params.q;
       console.error(`[SearXNG] Search succeeded in ${Date.now() - startedAt}ms via ${this.instanceUrl}`);
-      return scraped as unknown as SearXNGResponse;
+      return scraped as SearXNGResponse;
     }
 
     return this.searchWithFallback(params);
@@ -312,7 +321,7 @@ class SearXNGClient {
     if (this.rankedInstances.length === 0) {
       this.rankedInstances = await getRankedSearXNGInstances();
       this.runtimeState = pruneRuntimeState(this.runtimeState, new Set(this.rankedInstances.map((i) => i.url)));
-      await saveRuntimeState(this.runtimeState);
+      this.markStateDirty();
     }
 
     const startedAt = Date.now();
@@ -333,7 +342,14 @@ class SearXNGClient {
       const requestStartedAt = Date.now();
       try {
         console.error(`[SearXNG] Trying ranked instance #${attempts}: ${instance.url}`);
-        const response = await axios.get(`${instance.url.replace(/\/$/, "")}/search`, {
+
+        let parsedUrl: URL;
+        try { parsedUrl = new URL(instance.url); } catch { continue; }
+        if (parsedUrl.protocol !== "https:") { console.error(`[SearXNG] Skipping non-HTTPS: ${instance.url}`); continue; }
+        const hn = parsedUrl.hostname;
+        if (hn === "localhost" || hn === "127.0.0.1" || hn === "::1" || hn.startsWith("10.") || hn.startsWith("172.16.") || hn.startsWith("192.168.") || hn.startsWith("169.254.") || hn.startsWith("0.")) { console.error(`[SearXNG] Skipping internal IP: ${instance.url}`); continue; }
+
+        const response = await axios.get(`${parsedUrl.origin}/search`, {
           params,
           timeout: 15_000,
           maxRedirects: 0,
@@ -357,9 +373,10 @@ class SearXNGClient {
           latencyMs: Date.now() - requestStartedAt,
           now: Date.now(),
         });
-        await saveRuntimeState(this.runtimeState);
+        this.markStateDirty();
         console.error(`[SearXNG] Search succeeded via ${instance.url}`);
-        return scraped as unknown as SearXNGResponse;
+        await this.flushStateIfDirty();
+        return scraped as SearXNGResponse;
       } catch (error) {
         const errorClass = classifySearchError(error);
         this.runtimeState[instance.url] = recordFailure(currentState, {
@@ -367,12 +384,13 @@ class SearXNGClient {
           statusCode: this.statusCode(error),
           now: Date.now(),
         });
-        await saveRuntimeState(this.runtimeState);
+        this.markStateDirty();
         errors.push(`${instance.url}: ${errorClass}`);
         console.error(`[SearXNG] Instance failed (${errorClass}): ${instance.url}`);
       }
     }
 
+    await this.flushStateIfDirty();
     throw new Error(`All attempted SearXNG instances failed (${attempts} attempted): ${errors.join("; ")}`);
   }
 
@@ -385,6 +403,20 @@ class SearXNGClient {
   private statusCode(error: unknown): number | undefined {
     if (axios.isAxiosError(error)) return error.response?.status;
     return undefined;
+  }
+
+  private markStateDirty(): void {
+    this._dirty = true;
+    if (this._saveDebounceTimer) clearTimeout(this._saveDebounceTimer);
+    this._saveDebounceTimer = setTimeout(async () => {
+      // no-op: save happens in flushStateIfDirty
+    }, 2000);
+  }
+
+  private async flushStateIfDirty(): Promise<void> {
+    if (!this._dirty) return;
+    this._dirty = false;
+    try { await saveRuntimeState(this.runtimeState); } catch (e) { console.error("[SearXNG] Failed to save runtime state", e); }
   }
 
   async run(): Promise<void> {
@@ -440,7 +472,7 @@ class SearXNGClient {
 }
 
 const server = new SearXNGClient();
-server.run().catch(console.error);
+server.run().catch((e) => { console.error(e); process.exit(1); });
 
 function invalidResponseError(): Error & { code: string } {
   const error = new Error("SearXNG returned an invalid response shape") as Error & { code: string };

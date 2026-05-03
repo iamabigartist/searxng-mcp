@@ -45,7 +45,6 @@
     "env-paths": "^3.0.0"
   },
   "devDependencies": {
-    "@types/cheerio": "^0.22.35",
     "@types/node": "^20.11.24",
     "typescript": "^5.3.3"
   }

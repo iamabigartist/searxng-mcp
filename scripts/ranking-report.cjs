@@ -9,6 +9,8 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
 const ENGINE_PRIORITY = ["google", "brave", "bing", "duckduckgo"];
 const ENGINE_LABELS = ["Go", "Br", "Bi", "Dd"];
 
@@ -89,7 +91,7 @@ async function main() {
   const rows = ranked.map((r, i) => `
     <tr class="${i < 10 ? 'top10' : ''}">
       <td>${i + 1}</td>
-      <td class="url"><a href="${r.url}" target="_blank">${r.url.replace('https://','')}</a></td>
+      <td class="url"><a href="${esc(r.url)}" target="_blank">${esc(r.url.replace('https://',''))}</a></td>
       <td>${r.speed.toFixed(3)}s <span class="bucket">[${r.speedBucket}]</span></td>
       <td class="engines">${engineLabel(r.engineVec)}</td>
       <td>${r.uptimeMonth.toFixed(1)} <span class="bucket">[${r.uptimeBucket}]</span></td>

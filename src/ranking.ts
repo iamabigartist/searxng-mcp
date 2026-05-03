@@ -35,7 +35,7 @@ interface EngineInfo {
 function engineOk(engines: Record<string, unknown>, name: string): boolean {
   const ei = engines[name];
   if (!ei) return false;
-  return !isObject(ei) || (typeof ei.error_rate === "number" ? ei.error_rate : 0) === 0;
+  return !isObject(ei) || (typeof ei.error_rate === "number" && Number.isFinite(ei.error_rate) ? ei.error_rate : 0) === 0;
 }
 
 function engineVector(engines: Record<string, unknown>): boolean[] {
@@ -99,6 +99,6 @@ function numericOr(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
-function isObject(value: unknown): value is EngineInfo & Record<string, unknown> {
+function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }

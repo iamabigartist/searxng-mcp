@@ -176,6 +176,7 @@ export async function loadRuntimeState(filePath = getStateFilePath()): Promise<R
 
     const state: RuntimeStateStore = {};
     for (const [url, value] of Object.entries(parsed)) {
+      if (url === "__proto__" || url === "constructor" || url === "prototype") continue;
       if (isRuntimeState(value)) state[url] = value;
     }
     return state;
