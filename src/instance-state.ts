@@ -8,7 +8,6 @@ export type SearchErrorClass =
   | "rate_limit"
   | "server"
   | "network"
-  | "format_disabled"
   | "permanent"
   | "unknown";
 
@@ -64,7 +63,6 @@ const BACKOFF: Record<SearchErrorClass, { baseMs: number; multiplier: number; ca
   network: { baseMs: 10 * SECOND, multiplier: 1, capMs: 5 * MINUTE },
   server: { baseMs: 30 * SECOND, multiplier: 1.5, capMs: 30 * MINUTE },
   rate_limit: { baseMs: MINUTE, multiplier: 2, capMs: 24 * HOUR },
-  format_disabled: { baseMs: 10 * MINUTE, multiplier: 1, capMs: 24 * HOUR },
   permanent: { baseMs: Number.POSITIVE_INFINITY, multiplier: 1, capMs: Number.POSITIVE_INFINITY },
   unknown: { baseMs: 30 * SECOND, multiplier: 1.5, capMs: 30 * MINUTE },
 };
@@ -89,7 +87,7 @@ export function classifySearchError(error: unknown): SearchErrorClass {
     if (!location || location === "/" || !location.includes("search")) return "permanent";
     return "unknown";
   }
-  if (status === 403) return "format_disabled";
+  if (status === 403) return "unknown";
   if (typeof status === "number" && status >= 500 && status <= 599) return "server";
   if (typeof status === "number" && status >= 400 && status <= 499) return "unknown";
   if (err.code && NETWORK_CODES.has(err.code)) return "network";

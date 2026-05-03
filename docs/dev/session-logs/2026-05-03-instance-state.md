@@ -46,3 +46,44 @@ Implemented and verified the public SearXNG instance selection/runtime-state pha
 
 - If HTML parsing support is added later, revisit `format_disabled` instances rather than treating them as JSON-path failures.
 - If ranking rules change, update both `src/ranking.ts` and `scripts/ranking-report.cjs` together.
+
+## 2026-05-03 Loaded MCP Session QA
+
+### User
+
+> 不用管上述的opencode无法正常启动问题了, 已经解决了.
+> 现在回到你的主任务: 目前searxng auto插件已经加载到了当前session, 自行测试是否正确, 并迭代和修改.
+
+### Agent Actions
+
+- Exercised the loaded `searxng-auto_searxngsearch` MCP tool with live searches from the current OpenCode session.
+- Observed an initial all-fallback-failed result where the top 5 ranked public instances returned `permanent`, `format_disabled`, or `rate_limit` classifications.
+- Confirmed subsequent live calls succeeded after persisted runtime state skipped failed instances and reached a working public instance.
+- Probed searx.space ranked instances and confirmed the first 20 public JSON API calls could all fail with 429/403/500 despite healthy searx.space metadata.
+- Increased the fallback attempt budget from 5 to 15 while preserving the existing 30-second elapsed-time cap, and added a timeout to direct `SEARXNG_URL` mode.
+- Updated `.env.example` to document zero-config fallback and `USE_RANDOM_INSTANCE`.
+
+## 2026-05-03 Remove Attempt Cap
+
+### User
+
+> 最大fallback次数默认100%应该就可以了吧, 感觉没必要限制重选次数?
+
+### Agent Actions
+
+- Removed `MAX_FALLBACK_ATTEMPTS` constant entirely. Fallback now iterates ranked instances until 30-second time cap, without a hard count limit.
+
+## 2026-05-03 Switch to HTML Scraping
+
+### User
+
+> 那seaxng-public难道用的也是json API吗? 那意思是seaxng中难道也只有这几个能用么? 你不能够使用html方式么
+
+### Agent Actions
+
+- Added `cheerio` dependency for HTML parsing.
+- Created `src/html-scrape.ts` module that extracts structured results from SearXNG HTML search result pages using cheerio selectors.
+- Changed search flow from `format=json` to regular HTML scraping in both direct (`SEARXNG_URL`) and public-instance fallback paths.
+- Removed `format_disabled` error class — `403` now classified as `unknown`.
+- Rebuilt and verified: 6/6 tests pass, MCP smoke confirmed HTML scraping works on instances that previously returned 403/302 for JSON API.
+- Dramatically increased the usable public instance pool from ~2-3 to most of the 71 ranked instances.

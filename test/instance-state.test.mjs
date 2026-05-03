@@ -42,7 +42,7 @@ test('success resets failures and updates latency EWMA', () => {
 test('classifies SearXNG-specific error responses', () => {
   assert.equal(classifySearchError({ response: { status: 429 } }), 'rate_limit');
   assert.equal(classifySearchError({ response: { status: 302, headers: { location: '/' } } }), 'permanent');
-  assert.equal(classifySearchError({ response: { status: 403 } }), 'format_disabled');
+  assert.equal(classifySearchError({ response: { status: 403 } }), 'unknown');
   assert.equal(classifySearchError({ response: { status: 503 } }), 'server');
   assert.equal(classifySearchError({ code: 'ENOTFOUND' }), 'network');
   assert.equal(classifySearchError({ code: 'ESEARXNG_INVALID_RESPONSE' }), 'transient');

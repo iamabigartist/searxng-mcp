@@ -16,7 +16,6 @@ import {
   computeSkipUntil,
   createRuntimeState,
   InstanceRuntimeState,
-  isValidSearXNGResponse,
   loadRuntimeState,
   pruneRuntimeState,
   recordFailure,
@@ -25,6 +24,7 @@ import {
   saveRuntimeState,
 } from "./instance-state.js";
 import { engineLabel, INSTANCES_LIST_URL, RankedInstance, rankInstances } from "./ranking.js";
+import { isResultsPage, scrapeResults } from "./html-scrape.js";
 
 dotenv.config();
 
@@ -34,7 +34,6 @@ const SEARXNG_USERNAME = process.env.SEARXNG_USERNAME;
 const SEARXNG_PASSWORD = process.env.SEARXNG_PASSWORD;
 const USE_RANDOM_INSTANCE = process.env.USE_RANDOM_INSTANCE !== "false"; // Default to true if not set
 
-const MAX_FALLBACK_ATTEMPTS = 5;
 const MAX_FALLBACK_ELAPSED_MS = 30_000;
 
 // Function to fetch and rank SearXNG instances from searx.space
@@ -79,7 +78,6 @@ interface SearchParams {
   time_range?: string;
   categories?: string[];
   engines?: string[];
-  format?: string;
   safesearch?: number;
   pageno?: number;
 }
@@ -91,7 +89,7 @@ interface SearXNGResponse {
   results: unknown[];
   answers?: string[];
   corrections?: string[];
-  infoboxes?: any[];
+  infoboxes?: unknown[];
   suggestions?: string[];
   unresponsive_engines?: string[];
 }
@@ -225,7 +223,6 @@ class SearXNGClient {
         // Prepare search parameters with defaults
         const searchParams: SearchParams = {
           q: args.query,
-          format: 'json',
           language: typeof args.language === 'string' ? args.language : 'en',
           safesearch: typeof args.safesearch === 'number' ? args.safesearch : 1,
           pageno: typeof args.pageno === 'number' ? args.pageno : 1,
@@ -298,11 +295,14 @@ class SearXNGClient {
       if (!this.axiosInstance) throw new Error("SearXNG client is not initialized");
       const startedAt = Date.now();
       const response = await this.axiosInstance.get('/search', { params });
-      if (!isValidSearXNGResponse(response.data)) {
+      const html: unknown = response.data;
+      if (typeof html !== "string" || !isResultsPage(html)) {
         throw invalidResponseError();
       }
+      const scraped = scrapeResults(html);
+      scraped.query = params.q;
       console.error(`[SearXNG] Search succeeded in ${Date.now() - startedAt}ms via ${this.instanceUrl}`);
-      return response.data as SearXNGResponse;
+      return scraped as unknown as SearXNGResponse;
     }
 
     return this.searchWithFallback(params);
@@ -320,7 +320,6 @@ class SearXNGClient {
     let attempts = 0;
 
     for (const instance of this.rankedInstances) {
-      if (attempts >= MAX_FALLBACK_ATTEMPTS) break;
       if (Date.now() - startedAt >= MAX_FALLBACK_ELAPSED_MS) break;
 
       const currentState = this.getRuntimeState(instance.url);
@@ -340,15 +339,19 @@ class SearXNGClient {
           maxRedirects: 0,
           validateStatus: (status) => status >= 200 && status < 300,
           headers: {
-            "Accept": "application/json, text/html;q=0.9, */*;q=0.8",
+            "Accept": "text/html, application/xhtml+xml;q=0.9, */*;q=0.8",
             "Accept-Language": params.language ?? "en",
             "User-Agent": "Mozilla/5.0 (compatible; searxng-mcp/0.2.0; +https://github.com/iamabigartist/searxng-mcp)",
           },
         });
 
-        if (!isValidSearXNGResponse(response.data)) {
+        const html: unknown = response.data;
+        if (typeof html !== "string" || !isResultsPage(html)) {
           throw invalidResponseError();
         }
+
+        const scraped = scrapeResults(html);
+        scraped.query = params.q;
 
         this.runtimeState[instance.url] = recordSuccess(currentState, {
           latencyMs: Date.now() - requestStartedAt,
@@ -356,7 +359,7 @@ class SearXNGClient {
         });
         await saveRuntimeState(this.runtimeState);
         console.error(`[SearXNG] Search succeeded via ${instance.url}`);
-        return response.data as SearXNGResponse;
+        return scraped as unknown as SearXNGResponse;
       } catch (error) {
         const errorClass = classifySearchError(error);
         this.runtimeState[instance.url] = recordFailure(currentState, {
@@ -413,8 +416,9 @@ class SearXNGClient {
       // Create axios instance with the determined URL and auth if provided
       this.axiosInstance = axios.create({
         baseURL: this.instanceUrl,
+        timeout: 15_000,
         headers: {
-          'Accept': 'application/json',
+          'Accept': 'text/html, application/xhtml+xml;q=0.9, */*;q=0.8',
           'Content-Type': 'application/json',
         },
         ...(hasBasicAuth && {

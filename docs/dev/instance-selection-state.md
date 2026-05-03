@@ -50,7 +50,6 @@ type SearchErrorClass =
   | "rate_limit"
   | "server"
   | "network"
-  | "format_disabled"
   | "permanent"
   | "unknown";
 ```
@@ -59,7 +58,7 @@ Classification rules:
 
 - `429` => `rate_limit`.
 - `302` redirect to `/` or another non-search landing path => `permanent` for JSON API use.
-- `403` => `format_disabled`. The current JSON MCP path cannot use that instance until a future HTML parser is added.
+- `403` => `unknown`. HTML scraping does not request `format=json`, so a 403 is an unexpected server response.
 - `500..599` => `server`.
 - Axios network codes such as `ECONNREFUSED`, `ENOTFOUND`, `EHOSTUNREACH`, `ECONNRESET`, `ETIMEDOUT`, `ECONNABORTED` => `network`.
 - Valid HTTP 2xx with malformed or non-SearXNG JSON => `transient`.
@@ -77,7 +76,6 @@ Skip time is computed from persistent failure counters:
 | `network` | 10s | 1.0 | 5m |
 | `server` | 30s | 1.5 | 30m |
 | `rate_limit` | 60s | 2.0 | 24h |
-| `format_disabled` | 10m | 1.0 | 24h |
 | `permanent` | forever | — | forever |
 | `unknown` | 30s | 1.5 | 30m |
 
@@ -97,7 +95,9 @@ For automatic public-instance mode:
 6. Record latency and success state for the winning instance.
 7. Record error state for each failed instance.
 8. Persist state after every update.
-9. Stop after at most 5 attempted instances or 30 seconds total, whichever comes first.
+9. Stop after at most 30 seconds total. No hard attempt count limit.
+
+The MCP server scrapes SearXNG HTML search results pages instead of requiring `format=json` support. This avoids the `format_disabled` class entirely since most public instances disable `format=json` but serve regular HTML.
 
 If `SEARXNG_URL` is explicitly set, the user-selected self-hosted instance is used directly. Public-instance state pruning and fallback do not apply to that custom URL.
 
