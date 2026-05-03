@@ -15,6 +15,7 @@
     "build": "tsc && node -e \"require('fs').chmodSync('build/index.js', '755')\"",
     "prepare": "npm run build",
     "watch": "tsc --watch",
+    "test": "npm run build && node --test",
     "inspector": "npx @modelcontextprotocol/inspector build/index.js",
     "ranking": "node scripts/ranking-report.cjs",
     "prepublishOnly": "npm run build"
@@ -40,7 +41,7 @@
     "@modelcontextprotocol/sdk": "0.6.0",
     "axios": "^1.6.7",
     "dotenv": "^16.4.5",
-    "yaml": "^2.7.0"
+    "env-paths": "^3.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.24",
