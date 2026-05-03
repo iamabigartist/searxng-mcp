@@ -4,15 +4,15 @@
 
 > Forked from [tisDDM/searxng-mcp](https://github.com/tisDDM/searxng-mcp) (MIT).
 
-零配置 SearXNG 搜索 MCP 服务器。不设 `SEARXNG_URL` 时，自动从 [searx.space](https://searx.space) 拉取健康公共实例并随机选用。
+零配置 SearXNG 搜索 MCP 服务器。不设 `SEARXNG_URL` 时，自动从 [searx.space](https://searx.space) 拉取公共实例排行，并按排行从前往后尝试，直到第一个实例搜索成功。
 
 ## 与原版区别
 
 | | 原版 | 此 Fork |
 |---|---|---|
 | 实例来源 | `instances.yml`（静态列表，无健康数据） | `searx.space/data/instances.json`（实时健康指标） |
-| 过滤条件 | 仅排除 hidden/onion | `network_type=normal` + `http 200` + `uptime 100%` + `response <1s` + `search success 100%` |
-| 可选实例数 | ~71（含不可用） | ~28（已过滤为健康） |
+| 过滤条件 | 仅排除 hidden/onion | 仅排除非 `network_type=normal`（Tor/onion 等） |
+| 实例选择 | 随机实例 | 排行优先 + 失败跳过 + 持久化状态 |
 
 ## 安装
 
@@ -62,9 +62,10 @@ npm install && npm run build
 ## 调参须知
 
 - **⚠️ 公共实例是志愿者资源**：不设 `SEARXNG_URL` 时会自动使用公共 SearXNG 实例。这些实例由社区志愿者维护，请勿高频请求。**高频或商业用途请自托管** SearXNG 实例并设置 `SEARXNG_URL`。详见 [调研文档](docs/research.md)
-- **公共实例可能返回 429**：每个实例有各自限流策略，遇到 429 时重启 MCP 会话即可换一个实例
+- **公共实例可能返回 429**：每个实例有各自限流策略。插件会记录 429、网络错误、服务器错误等状态，并在冷却时间内跳过对应实例。
 - **响应速度波动**：不同实例地理位置和服务器配置不同，首次搜索可能略慢
-- **健康过滤可调整**：修改 `src/index.ts` 中 `getRandomSearXNGInstance()` 的过滤条件（如降低 uptime 阈值以增加候选实例）
+- **实例排行可视化**：运行 `npm run ranking` 生成 `ranking.html`，查看当前 searx.space 数据下的完整排行。
+- **运行状态持久化**：自动模式会在系统数据目录保存实例失败与延迟状态。冷却结束不会清空失败计数，只有成功搜索会重置该实例的错误状态。
 
 ## 工具
 
