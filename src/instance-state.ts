@@ -1,8 +1,3 @@
-import { randomUUID } from "node:crypto";
-import { open, readFile, rename, mkdir, unlink, readdir } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import envPaths from "env-paths";
-
 export type SearchErrorClass =
   | "transient"
   | "rate_limit"
@@ -96,6 +91,7 @@ export function classifySearchError(error: unknown): SearchErrorClass {
   return "unknown";
 }
 
+/** Validates that a value looks like a SearXNG JSON search response. */
 export function isValidSearXNGResponse(value: unknown): boolean {
   if (!isObject(value)) return false;
   const response = value as { query?: unknown; results?: unknown };
@@ -155,84 +151,13 @@ export function computeSkipUntil(state: InstanceRuntimeState, now = Date.now()):
   return skipUntil > now ? skipUntil : undefined;
 }
 
+/** Remove state entries for URLs no longer in the current ranked public instance list. */
 export function pruneRuntimeState(state: RuntimeStateStore, liveUrls: Set<string>): RuntimeStateStore {
   const pruned: RuntimeStateStore = {};
   for (const [url, value] of Object.entries(state)) {
     if (liveUrls.has(url)) pruned[url] = value;
   }
   return pruned;
-}
-
-export function getStateFilePath(): string {
-  const paths = envPaths("searxng-mcp", { suffix: "" });
-  return join(paths.data, "instance-state.json");
-}
-
-export async function loadRuntimeState(filePath = getStateFilePath()): Promise<RuntimeStateStore> {
-  try {
-    const content = await readFile(filePath, "utf-8");
-    const parsed: unknown = JSON.parse(content);
-    if (!isObject(parsed)) return {};
-
-    const state: RuntimeStateStore = {};
-    for (const [url, value] of Object.entries(parsed)) {
-      if (url === "__proto__" || url === "constructor" || url === "prototype") continue;
-      if (isRuntimeState(value)) state[url] = value;
-    }
-    return state;
-  } catch (error) {
-    if (isObject(error) && (error as { code?: unknown }).code === "ENOENT") return {};
-    console.error("[SearXNG] Could not load runtime state; starting with empty state", error);
-    return {};
-  }
-}
-
-export async function saveRuntimeState(state: RuntimeStateStore, filePath = getStateFilePath()): Promise<void> {
-  await cleanupTempFiles(dirname(filePath));
-  await atomicWriteJSON(filePath, state);
-}
-
-async function atomicWriteJSON(filePath: string, data: unknown): Promise<void> {
-  const dir = dirname(filePath);
-  const tmpPath = join(dir, `.instance-state-${randomUUID()}.tmp`);
-  await mkdir(dir, { recursive: true });
-
-  const handle = await open(tmpPath, "w", 0o600);
-  try {
-    await handle.writeFile(JSON.stringify(data, null, 2), "utf-8");
-    await handle.datasync();
-  } finally {
-    await handle.close();
-  }
-
-  try {
-    await rename(tmpPath, filePath);
-  } catch (error) {
-    if (isObject(error) && process.platform === "win32") {
-      const code = (error as { code?: unknown }).code;
-      if (code === "EPERM" || code === "EACCES" || code === "EBUSY") {
-        await new Promise((resolve) => setTimeout(resolve, 10));
-        await rename(tmpPath, filePath);
-        return;
-      }
-    }
-    await unlink(tmpPath).catch(() => undefined);
-    throw error;
-  }
-}
-
-async function cleanupTempFiles(dir: string): Promise<void> {
-  try {
-    const entries = await readdir(dir);
-    await Promise.all(
-      entries
-        .filter((entry) => entry.startsWith(".instance-state-") && entry.endsWith(".tmp"))
-        .map((entry) => unlink(join(dir, entry)).catch(() => undefined))
-    );
-  } catch (error) {
-    if (isObject(error) && (error as { code?: unknown }).code === "ENOENT") return;
-    console.error("[SearXNG] Could not clean runtime state temp files", error);
-  }
 }
 
 function headerValue(headers: Record<string, string | string[] | undefined> | undefined, name: string): string | undefined {
@@ -243,14 +168,4 @@ function headerValue(headers: Record<string, string | string[] | undefined> | un
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
-}
-
-function isRuntimeState(value: unknown): value is InstanceRuntimeState {
-  if (!isObject(value)) return false;
-  return (
-    typeof value.url === "string" &&
-    isObject(value.consecutiveFailures) &&
-    typeof value.totalRequests === "number" &&
-    typeof value.totalFailures === "number"
-  );
 }

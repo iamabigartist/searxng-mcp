@@ -16,12 +16,10 @@ import {
   computeSkipUntil,
   createRuntimeState,
   InstanceRuntimeState,
-  loadRuntimeState,
   pruneRuntimeState,
   recordFailure,
   recordSuccess,
   RuntimeStateStore,
-  saveRuntimeState,
 } from "./instance-state.js";
 import { engineLabel, INSTANCES_LIST_URL, RankedInstance, rankInstances } from "./ranking.js";
 import { isResultsPage, scrapeResults } from "./html-scrape.js";
@@ -100,8 +98,6 @@ class SearXNGClient {
   private instanceUrl: string;
   private rankedInstances: RankedInstance[] = [];
   private runtimeState: RuntimeStateStore = {};
-  private _dirty: boolean = false;
-  private _saveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(instanceUrl?: string) {
     this.instanceUrl = instanceUrl || "";
@@ -130,7 +126,6 @@ class SearXNGClient {
     };
 
     process.on('SIGINT', async () => {
-      await this.flushStateIfDirty();
       await this.server.close();
       process.exit(0);
     });
@@ -321,7 +316,6 @@ class SearXNGClient {
     if (this.rankedInstances.length === 0) {
       this.rankedInstances = await getRankedSearXNGInstances();
       this.runtimeState = pruneRuntimeState(this.runtimeState, new Set(this.rankedInstances.map((i) => i.url)));
-      this.markStateDirty();
     }
 
     const startedAt = Date.now();
@@ -373,9 +367,7 @@ class SearXNGClient {
           latencyMs: Date.now() - requestStartedAt,
           now: Date.now(),
         });
-        this.markStateDirty();
         console.error(`[SearXNG] Search succeeded via ${instance.url}`);
-        await this.flushStateIfDirty();
         return scraped as SearXNGResponse;
       } catch (error) {
         const errorClass = classifySearchError(error);
@@ -384,13 +376,11 @@ class SearXNGClient {
           statusCode: this.statusCode(error),
           now: Date.now(),
         });
-        this.markStateDirty();
         errors.push(`${instance.url}: ${errorClass}`);
         console.error(`[SearXNG] Instance failed (${errorClass}): ${instance.url}`);
       }
     }
 
-    await this.flushStateIfDirty();
     throw new Error(`All attempted SearXNG instances failed (${attempts} attempted): ${errors.join("; ")}`);
   }
 
@@ -405,23 +395,7 @@ class SearXNGClient {
     return undefined;
   }
 
-  private markStateDirty(): void {
-    this._dirty = true;
-    if (this._saveDebounceTimer) clearTimeout(this._saveDebounceTimer);
-    this._saveDebounceTimer = setTimeout(async () => {
-      // no-op: save happens in flushStateIfDirty
-    }, 2000);
-  }
-
-  private async flushStateIfDirty(): Promise<void> {
-    if (!this._dirty) return;
-    this._dirty = false;
-    try { await saveRuntimeState(this.runtimeState); } catch (e) { console.error("[SearXNG] Failed to save runtime state", e); }
-  }
-
   async run(): Promise<void> {
-    this.runtimeState = await loadRuntimeState();
-
     // Determine which SearXNG instance to use
     if (!this.instanceUrl) {
       if (SEARXNG_URL) {
@@ -433,7 +407,6 @@ class SearXNGClient {
         try {
           this.rankedInstances = await getRankedSearXNGInstances();
           this.runtimeState = pruneRuntimeState(this.runtimeState, new Set(this.rankedInstances.map((i) => i.url)));
-          await saveRuntimeState(this.runtimeState);
         } catch (error) {
           console.error("[SearXNG] Error getting ranked instances:", error);
           throw new Error("Failed to get SearXNG instances. Please provide SEARXNG_URL or fix the instance fetching issue.");

@@ -102,13 +102,9 @@ If `SEARXNG_URL` is explicitly set, the user-selected self-hosted instance is us
 
 ## Persistence
 
-Use a small JSON file under the OS data directory:
+Runtime state is kept purely in-memory within each MCP process. Each Chat session spawns its own MCP process, so state is naturally per-session with zero cross-session contamination. When a session ends and the MCP process exits, state is discarded.
 
-- Path resolution: `env-paths("searxng-mcp", { suffix: "" }).data`.
-- File name: `instance-state.json`.
-- Write pattern: atomic temp file in the same directory, then rename.
-- On startup: missing file means empty state. Invalid JSON is ignored with a warning and replaced on next write.
-- On write: keep the file bounded by pruning entries absent from the current searx.space list.
+This replaces the previous file-based persistence (`env-paths` + `instance-state.json`) which introduced cross-process race conditions, stale file cleanup complexity, and unnecessary disk I/O for data that only needs to live within a single session lifetime.
 
 ## Mutable Metrics
 
