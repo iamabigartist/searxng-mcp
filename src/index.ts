@@ -97,6 +97,7 @@ class SearXNGClient {
   private axiosInstance?: AxiosInstance;
   private instanceUrl: string;
   private rankedInstances: RankedInstance[] = [];
+  private rankedInstancesInit?: Promise<void>;
   private runtimeState: RuntimeStateStore = {};
 
   constructor(instanceUrl?: string) {
@@ -313,10 +314,7 @@ class SearXNGClient {
   }
 
   private async searchWithFallback(params: SearchParams): Promise<SearXNGResponse> {
-    if (this.rankedInstances.length === 0) {
-      this.rankedInstances = await getRankedSearXNGInstances();
-      this.runtimeState = pruneRuntimeState(this.runtimeState, new Set(this.rankedInstances.map((i) => i.url)));
-    }
+    await this.ensureRankedInstances();
 
     const startedAt = Date.now();
     const errors: string[] = [];
@@ -384,6 +382,29 @@ class SearXNGClient {
     throw new Error(`All attempted SearXNG instances failed (${attempts} attempted): ${errors.join("; ")}`);
   }
 
+  private async ensureRankedInstances(): Promise<void> {
+    if (this.rankedInstances.length > 0) return;
+
+    this.rankedInstancesInit ??= getRankedSearXNGInstances()
+      .then((instances) => {
+        this.rankedInstances = instances;
+        this.runtimeState = pruneRuntimeState(this.runtimeState, new Set(instances.map((i) => i.url)));
+      })
+      .catch((error: unknown) => {
+        this.rankedInstancesInit = undefined;
+        throw error;
+      });
+
+    await this.rankedInstancesInit;
+  }
+
+  private warmRankedInstances(): void {
+    void this.ensureRankedInstances().catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error).slice(0, 200);
+      console.error(`[SearXNG] Public-instance warmup failed: ${message}`);
+    });
+  }
+
   private getRuntimeState(url: string): InstanceRuntimeState {
     const state = this.runtimeState[url] ?? createRuntimeState(url);
     this.runtimeState[url] = state;
@@ -403,14 +424,7 @@ class SearXNGClient {
         this.instanceUrl = SEARXNG_URL;
         console.error(`[SearXNG] Using specified instance: ${this.instanceUrl}`);
       } else if (USE_RANDOM_INSTANCE) {
-        console.error("[SearXNG] No URL specified, will use ranked public-instance fallback");
-        try {
-          this.rankedInstances = await getRankedSearXNGInstances();
-          this.runtimeState = pruneRuntimeState(this.runtimeState, new Set(this.rankedInstances.map((i) => i.url)));
-        } catch (error) {
-          console.error("[SearXNG] Error getting ranked instances:", error);
-          throw new Error("Failed to get SearXNG instances. Please provide SEARXNG_URL or fix the instance fetching issue.");
-        }
+        console.error("[SearXNG] No URL specified, will warm ranked public-instance fallback after startup");
       } else {
         // If no URL is specified and random instances are disabled, throw an error
         throw new Error("SEARXNG_URL environment variable is required when USE_RANDOM_INSTANCE is set to false");
@@ -441,6 +455,10 @@ class SearXNGClient {
     console.error(this.instanceUrl ? `Connected to SearXNG instance at: ${this.instanceUrl}` : `Connected with ${this.rankedInstances.length} ranked public instances`);
     console.error(`Basic auth: ${hasBasicAuth ? 'Enabled' : 'Disabled'}`);
     console.error(`Random instance selection: ${USE_RANDOM_INSTANCE ? 'Enabled' : 'Disabled'}`);
+
+    if (!this.instanceUrl && USE_RANDOM_INSTANCE) {
+      this.warmRankedInstances();
+    }
   }
 }
 

@@ -22,7 +22,7 @@ No weighted score is introduced. Runtime failure state is a skip gate layered on
 
 ## Runtime State Model
 
-Each public instance URL has an optional persisted state record:
+Each public instance URL has an optional in-memory state record:
 
 ```ts
 interface InstanceRuntimeState {
@@ -67,7 +67,7 @@ A successful SearXNG JSON response does not need non-empty results. `number_of_r
 
 ## Skip Time Calculation
 
-Skip time is computed from persistent failure counters:
+Skip time is computed from in-memory failure counters:
 
 | Class | Base | Multiplier | Cap |
 |---|---:|---:|---:|
@@ -86,15 +86,17 @@ Skip time is computed from persistent failure counters:
 
 For automatic public-instance mode:
 
-1. Fetch and rank all clearnet instances from searx.space.
-2. Prune persisted state entries that are not present in the current public instance list.
-3. On each tool call, iterate the ranked list from top to bottom.
-4. Skip instances whose `computeSkipUntil(state, now)` is still in the future.
-5. Try each eligible instance until the first valid successful response.
-6. Record latency and success state for the winning instance.
-7. Record error state for each failed instance.
-8. Persist state after every update.
-9. Stop after at most 30 seconds total. No hard attempt count limit.
+1. Start the MCP stdio server without fetching public instances, so client initialization is not blocked by network discovery.
+2. After stdio connection succeeds, start a background public-instance warmup that fetches and ranks all clearnet instances from searx.space.
+3. Store that warmup as a shared initialization promise so a first search can await the same in-flight work instead of fetching twice.
+4. If the warmup fails, clear the shared promise so a later search can retry discovery.
+5. Prune in-memory state entries that are not present in the current public instance list after discovery succeeds.
+6. On each tool call, iterate the ranked list from top to bottom.
+7. Skip instances whose `computeSkipUntil(state, now)` is still in the future.
+8. Try each eligible instance until the first valid successful response.
+9. Record latency and success state for the winning instance.
+10. Record error state for each failed instance.
+11. Stop after at most 30 seconds total. No hard attempt count limit.
 
 The MCP server scrapes SearXNG HTML search results pages instead of requiring `format=json` support. This avoids the `format_disabled` class entirely since most public instances disable `format=json` but serve regular HTML.
 
@@ -119,10 +121,10 @@ This is stored for diagnostics and future tuning. It does not change the static 
 ## Implementation Plan
 
 1. Extract ranking into `src/ranking.ts` and reuse it from `src/index.ts`.
-2. Add `src/instance-state.ts` with pure classification, skip calculation, success/failure state update, pruning, and JSON persistence helpers.
+2. Add `src/instance-state.ts` with pure classification, skip calculation, success/failure state update, and pruning helpers.
 3. Add `test/instance-state.test.mjs` using `node:test` against the built JS output.
 4. Add a `test` script that builds first and runs `node --test`.
-5. Refactor `src/index.ts` to use ranked fallback per request rather than a startup-only random pick.
+5. Refactor `src/index.ts` to connect stdio first, warm ranked instances in the background, and await/retry the shared discovery promise from search.
 6. Update README tuning notes after behavior changes.
 
 `scripts/ranking-report.cjs` intentionally keeps a small CommonJS copy of the ranking logic because the report script runs directly from source without a prior TypeScript build. Keep it synchronized with `src/ranking.ts` when ranking rules change.
@@ -132,4 +134,4 @@ This is stored for diagnostics and future tuning. It does not change the static 
 - Unit tests cover skip calculation, cooldown expiry not resetting counters, success reset, error classification, EWMA update, and pruning.
 - `npm test` must pass.
 - `npm run build` must pass.
-- Generated MCP server must start and list tools through a minimal smoke test.
+- Generated MCP server must start and list tools before public-instance discovery can block client initialization, then perform a search through a minimal smoke test.
