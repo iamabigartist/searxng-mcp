@@ -100,7 +100,7 @@ For automatic public-instance mode:
 
 The MCP server scrapes SearXNG HTML search results pages instead of requiring `format=json` support. This avoids the `format_disabled` class entirely since most public instances disable `format=json` but serve regular HTML.
 
-If `SEARXNG_URL` is explicitly set, the user-selected self-hosted instance is used directly. Public-instance state pruning and fallback do not apply to that custom URL.
+If `SEARXNG_URL` is explicitly set, the user-selected self-hosted instance is tried first. A valid SearXNG results page from that instance is returned as-is, including zero-result pages. If that request fails with a network/server/rate-limit/invalid-response error and `USE_RANDOM_INSTANCE` is still enabled, the server falls back to the ranked public-instance list. Set `USE_RANDOM_INSTANCE=false` to make the custom URL mandatory and disable public fallback.
 
 ## Persistence
 
