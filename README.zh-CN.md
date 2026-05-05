@@ -54,14 +54,14 @@ npm install && npm run build
 
 | 变量 | 必填 | 默认 | 说明 |
 |---|---|---|---|
-| `SEARXNG_URL` | 否 | 自动从 searx.space 获取 | 指定自托管实例地址 |
-| `USE_RANDOM_INSTANCE` | 否 | `true` | 设为 `false` 时须提供 `SEARXNG_URL` |
+| `SEARXNG_URL` | 否 | 自动从 searx.space 获取 | 指定自托管实例地址；默认优先使用，失败时回退到公共实例 |
+| `USE_RANDOM_INSTANCE` | 否 | `true` | 设为 `false` 时禁止公共实例回退，须提供 `SEARXNG_URL` |
 | `SEARXNG_USERNAME` | 否 | — | 自托管实例 Basic Auth 用户名 |
 | `SEARXNG_PASSWORD` | 否 | — | 自托管实例 Basic Auth 密码 |
 
 ## 调参须知
 
-- **⚠️ 公共实例是志愿者资源**：不设 `SEARXNG_URL` 时会自动使用公共 SearXNG 实例。这些实例由社区志愿者维护，请勿高频请求。**高频或商业用途请自托管** SearXNG 实例并设置 `SEARXNG_URL`。详见 [调研文档](docs/research.md)
+- **⚠️ 公共实例是志愿者资源**：不设 `SEARXNG_URL` 时会自动使用公共 SearXNG 实例；设置 `SEARXNG_URL` 时会优先使用自托管实例，并在自托管实例请求失败时回退到公共实例。若要完全禁用公共实例，请设置 `USE_RANDOM_INSTANCE=false`。这些实例由社区志愿者维护，请勿高频请求。**高频或商业用途请自托管** SearXNG 实例并设置 `SEARXNG_URL`。详见 [调研文档](docs/research.md)
 - The tool scrapes SearXNG HTML search result pages rather than requiring JSON API support (which most public instances disable).
 - **公共实例可能返回 429**：各实例有独立限流策略。插件会记录 429、网络错误、服务器错误等状态，并在冷却时间内跳过对应实例。
 - **响应速度波动**：不同实例地理位置和服务器配置不同，首次搜索可能稍慢
