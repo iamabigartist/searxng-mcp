@@ -1,4 +1,4 @@
-export const INSTANCES_LIST_URL = "https://searx.space/data/instances.json";
+export const INSTANCES_LIST_URL = process.env.SEARXNG_INSTANCES_LIST_URL ?? "https://searx.space/data/instances.json";
 
 const ENGINE_PRIORITY = ["google", "brave", "bing", "duckduckgo"] as const;
 

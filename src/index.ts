@@ -31,6 +31,7 @@ const SEARXNG_URL = process.env.SEARXNG_URL;
 const SEARXNG_USERNAME = process.env.SEARXNG_USERNAME;
 const SEARXNG_PASSWORD = process.env.SEARXNG_PASSWORD;
 const USE_RANDOM_INSTANCE = process.env.USE_RANDOM_INSTANCE !== "false"; // Default to true if not set
+const ALLOW_INSECURE_PUBLIC_INSTANCES_FOR_TESTS = process.env.SEARXNG_ALLOW_INSECURE_PUBLIC_INSTANCES_FOR_TESTS === "true";
 
 const MAX_FALLBACK_ELAPSED_MS = 30_000;
 
@@ -297,20 +298,32 @@ class SearXNGClient {
 
   private async search(params: SearchParams): Promise<SearXNGResponse> {
     if (this.instanceUrl) {
-      if (!this.axiosInstance) throw new Error("SearXNG client is not initialized");
-      const startedAt = Date.now();
-      const response = await this.axiosInstance.get('/search', { params });
-      const html: unknown = response.data;
-      if (typeof html !== "string" || !isResultsPage(html)) {
-        throw invalidResponseError();
+      try {
+        return await this.searchConfiguredInstance(params);
+      } catch (error) {
+        if (!USE_RANDOM_INSTANCE) throw error;
+
+        const errorClass = classifySearchError(error);
+        console.error(`[SearXNG] Configured instance failed (${errorClass}), falling back to ranked public instances: ${this.instanceUrl}`);
       }
-      const scraped = scrapeResults(html);
-      scraped.query = params.q;
-      console.error(`[SearXNG] Search succeeded in ${Date.now() - startedAt}ms via ${this.instanceUrl}`);
-      return scraped as SearXNGResponse;
     }
 
     return this.searchWithFallback(params);
+  }
+
+  private async searchConfiguredInstance(params: SearchParams): Promise<SearXNGResponse> {
+    if (!this.axiosInstance) throw new Error("SearXNG client is not initialized");
+
+    const startedAt = Date.now();
+    const response = await this.axiosInstance.get('/search', { params });
+    const html: unknown = response.data;
+    if (typeof html !== "string" || !isResultsPage(html)) {
+      throw invalidResponseError();
+    }
+    const scraped = scrapeResults(html);
+    scraped.query = params.q;
+    console.error(`[SearXNG] Search succeeded in ${Date.now() - startedAt}ms via ${this.instanceUrl}`);
+    return scraped as SearXNGResponse;
   }
 
   private async searchWithFallback(params: SearchParams): Promise<SearXNGResponse> {
@@ -322,6 +335,7 @@ class SearXNGClient {
 
     for (const instance of this.rankedInstances) {
       if (Date.now() - startedAt >= MAX_FALLBACK_ELAPSED_MS) break;
+      if (this.sameOrigin(instance.url, this.instanceUrl)) continue;
 
       const currentState = this.getRuntimeState(instance.url);
       const skipUntil = computeSkipUntil(currentState);
@@ -337,9 +351,9 @@ class SearXNGClient {
 
         let parsedUrl: URL;
         try { parsedUrl = new URL(instance.url); } catch { continue; }
-        if (parsedUrl.protocol !== "https:") { console.error(`[SearXNG] Skipping non-HTTPS: ${instance.url}`); continue; }
+        if (!ALLOW_INSECURE_PUBLIC_INSTANCES_FOR_TESTS && parsedUrl.protocol !== "https:") { console.error(`[SearXNG] Skipping non-HTTPS: ${instance.url}`); continue; }
         const hn = parsedUrl.hostname;
-        if (hn === "localhost" || hn === "127.0.0.1" || hn === "::1" || hn.startsWith("10.") || hn.startsWith("172.16.") || hn.startsWith("192.168.") || hn.startsWith("169.254.") || hn.startsWith("0.")) { console.error(`[SearXNG] Skipping internal IP: ${instance.url}`); continue; }
+        if (!ALLOW_INSECURE_PUBLIC_INSTANCES_FOR_TESTS && (hn === "localhost" || hn === "127.0.0.1" || hn === "::1" || hn.startsWith("10.") || hn.startsWith("172.16.") || hn.startsWith("192.168.") || hn.startsWith("169.254.") || hn.startsWith("0."))) { console.error(`[SearXNG] Skipping internal IP: ${instance.url}`); continue; }
 
         const response = await axios.get(`${parsedUrl.origin}/search`, {
           params,
@@ -416,6 +430,15 @@ class SearXNGClient {
     return undefined;
   }
 
+  private sameOrigin(left: string, right: string): boolean {
+    if (!left || !right) return false;
+    try {
+      return new URL(left).origin === new URL(right).origin;
+    } catch {
+      return left === right;
+    }
+  }
+
   async run(): Promise<void> {
     // Determine which SearXNG instance to use
     if (!this.instanceUrl) {
@@ -456,7 +479,7 @@ class SearXNGClient {
     console.error(`Basic auth: ${hasBasicAuth ? 'Enabled' : 'Disabled'}`);
     console.error(`Random instance selection: ${USE_RANDOM_INSTANCE ? 'Enabled' : 'Disabled'}`);
 
-    if (!this.instanceUrl && USE_RANDOM_INSTANCE) {
+    if (USE_RANDOM_INSTANCE) {
       this.warmRankedInstances();
     }
   }
